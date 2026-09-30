@@ -32,6 +32,18 @@ import Testing
     #expect((foundation["array"] as? [Any])?.count == 3)
 }
 
+/// `NSNumber` casts to `Bool` whenever it holds 0 or 1, so a property-list integer
+/// must be told from a real Boolean by its type rather than by the cast.
+@Test func keepsFoundationNumbersThatLookLikeBooleans() {
+    #expect(NectoJSONValue(foundationValue: NSNumber(value: 1)) == .number(1))
+    #expect(NectoJSONValue(foundationValue: NSNumber(value: 0)) == .number(0))
+    #expect(NectoJSONValue(foundationValue: NSNumber(value: 1.0)) == .number(1))
+    #expect(NectoJSONValue(foundationValue: NSNumber(value: true)) == .bool(true))
+    #expect(NectoJSONValue(foundationValue: NSNumber(value: false)) == .bool(false))
+    #expect(NectoJSONValue(foundationValue: ["count": NSNumber(value: 1), "flags": [NSNumber(value: 0)]])
+        == ["count": 1, "flags": [0]])
+}
+
 @Test func refusesValuesOutsideFoundationJSON() {
     #expect(NectoJSONValue(foundationValue: Date()) == nil)
     #expect(NectoJSONValue(foundationValue: [Date()]) == nil)

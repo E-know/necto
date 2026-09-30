@@ -25,10 +25,12 @@ public extension NectoJSONValue {
         switch value {
         case nil, is NSNull:
             self = .null
-        case let value as Bool:
-            self = .bool(value)
+        // `NSNumber` casts to `Bool` whenever it holds 0 or 1, so only a number that
+        // really is a Boolean may become one.
         case let value as NSNumber:
-            self = .number(value.doubleValue)
+            self = CFGetTypeID(value) == CFBooleanGetTypeID()
+                ? .bool(value.boolValue)
+                : .number(value.doubleValue)
         case let value as String:
             self = .string(value)
         case let value as [Any]:
