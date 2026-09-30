@@ -454,18 +454,28 @@ async function select(key: string): Promise<void> {
     closeDetail();
     return;
   }
+  const store = suite;
   selectedKey = key;
   detail = null;
   renderList();
   renderDetail();
 
   try {
-    const output = await necto.device.send<{ entry: Detail }>("preferences.detail", { suite, key });
+    const output = await necto.device.send<{ entry: Detail }>("preferences.detail", { suite: store, key });
+    if (!isShowing(store, key)) return;
     detail = output.entry;
   } catch (error) {
+    if (!isShowing(store, key)) return;
     message = messageOf(error);
   }
   renderDetail();
+}
+
+/// Whether an answer still belongs to the key on screen. Requests overlap, and the one
+/// for a key already left behind can be the last to come back: shown under the key
+/// selected since, its value would be what the next save writes there.
+function isShowing(store: string, key: string): boolean {
+  return suite === store && selectedKey === key;
 }
 
 function closeDetail(): void {
@@ -486,25 +496,28 @@ function parsed(text: string): NectoJSONValue {
 }
 
 async function write(value: NectoJSONValue, typeHint?: string): Promise<void> {
+  const store = suite;
   const key = selectedKey;
   if (!key) return;
   const output = await necto.device.send<{ entry: Detail }>("preferences.set", {
-    suite,
+    suite: store,
     key,
     value,
     ...(typeHint ? { type: typeHint } : {}),
   });
-  detail = output.entry;
-  await load();
+  if (isShowing(store, key)) detail = output.entry;
+  if (suite === store) await load();
   renderDetail();
 }
 
 async function erase(): Promise<void> {
-  if (!selectedKey) return;
+  const store = suite;
+  const key = selectedKey;
+  if (!key) return;
   try {
-    await necto.device.send("preferences.remove", { suite, key: selectedKey });
-    closeDetail();
-    await load();
+    await necto.device.send("preferences.remove", { suite: store, key });
+    if (isShowing(store, key)) closeDetail();
+    if (suite === store) await load();
   } catch (error) {
     message = messageOf(error);
     renderList();
