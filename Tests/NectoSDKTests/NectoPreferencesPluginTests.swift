@@ -158,6 +158,23 @@ struct NectoPreferencesPluginTests {
         #expect(try JSONDecoder().decode(NectoJSONValue.self, from: Data(stepsText.utf8)) == [1, 0, false])
     }
 
+    /// JSON numbers are all Double, which would round a large identifier. Described in
+    /// the app's own words instead, the container is shown whole and the panel leaves
+    /// it read-only rather than saving the rounded number back.
+    @Test("describes a container whose integer JSON would round")
+    func describesContainerJSONWouldRound() async throws {
+        let suite = makeSuite()
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite.name) }
+        suite.defaults.set(["id": 9_007_199_254_740_993], forKey: "account")
+
+        let plugin = NectoPreferencesPlugin(suites: [suite.name])
+        let detail = try await call(plugin, "preferences.detail", ["suite": .string(suite.name), "key": "account"])
+        let text = try #require(detail["entry"]?["value"]?.stringValue)
+
+        #expect(text.contains("9007199254740993"))
+        #expect((try? JSONSerialization.jsonObject(with: Data(text.utf8))) == nil)
+    }
+
     /// The panel accepts any whole number, and one too large for `Int` must come back
     /// as an error rather than end the app being debugged.
     @Test("refuses an Int that does not fit", arguments: [1e30, -1e30, 9_223_372_036_854_775_808])

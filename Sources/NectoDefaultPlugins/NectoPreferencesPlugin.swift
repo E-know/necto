@@ -170,7 +170,7 @@ public final class NectoPreferencesPlugin: NectoPlugin, @unchecked Sendable {
         case let ("Int", .number(number)):
             // `Int(_:)` traps outside its range, and the number is whatever was typed.
             guard let integer = Int(exactly: number) else {
-                throw NectoBridgeError(code: .invalidInput, message: "\(number) does not fit an Int")
+                throw NectoBridgeError(code: .invalidInput, message: "\(number) is not a value an Int can hold")
             }
             return integer
         case let ("Date", .string(text)):

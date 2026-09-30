@@ -44,6 +44,18 @@ import Testing
         == ["count": 1, "flags": [0]])
 }
 
+/// A `Double` holds every integer only below 2^53. Rounding a larger one would hand
+/// back a different number as if it were the one that was stored.
+@Test func refusesFoundationIntegersADoubleCannotHold() {
+    #expect(NectoJSONValue(foundationValue: NSNumber(value: 9_007_199_254_740_991)) == .number(9_007_199_254_740_991))
+    #expect(NectoJSONValue(foundationValue: NSNumber(value: -9_007_199_254_740_991)) == .number(-9_007_199_254_740_991))
+    #expect(NectoJSONValue(foundationValue: NSNumber(value: 9_007_199_254_740_993)) == nil)
+    #expect(NectoJSONValue(foundationValue: NSNumber(value: Int64.min)) == nil)
+    #expect(NectoJSONValue(foundationValue: NSNumber(value: UInt64.max)) == nil)
+    #expect(NectoJSONValue(foundationValue: ["id": NSNumber(value: 9_007_199_254_740_993)]) == nil)
+    #expect(NectoJSONValue(foundationValue: NSNumber(value: 1e300)) == .number(1e300))
+}
+
 @Test func refusesValuesOutsideFoundationJSON() {
     #expect(NectoJSONValue(foundationValue: Date()) == nil)
     #expect(NectoJSONValue(foundationValue: [Date()]) == nil)
