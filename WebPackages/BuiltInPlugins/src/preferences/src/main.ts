@@ -6,6 +6,7 @@ import "./style.css";
 
 import { createDetailPane, necto, isNectoBridgeError, type NectoJSONValue } from "@necto/bridge";
 import { t } from "./localization";
+import { arrayItems, dictionaryFields, display, element, numberValue } from "./model";
 
 interface Entry {
   key: string;
@@ -244,8 +245,8 @@ function detailBody(): Node[] {
     case "Double": {
       const field = numberField(detail.value);
       const save = saveButton(() => {
-        const number = Number(field.value.trim());
-        if (!Number.isFinite(number) || (detail?.type === "Int" && !Number.isInteger(number))) {
+        const number = numberValue(field.value, detail?.type ?? "");
+        if (number === null) {
           note.textContent = t("Not a valid {type}", { type: detail?.type ?? "number" });
           return;
         }
@@ -273,12 +274,9 @@ function detailBody(): Node[] {
     case "Array": {
       // Rows rather than a JSON blob: one element per field, and an element that is
       // itself structured is one line of JSON in its row.
-      let items: string[];
-      try {
-        items = (JSON.parse(detail.value) as NectoJSONValue[]).map(display);
-      } catch {
-        items = [];
-      }
+      const stored = arrayItems(detail.value);
+      if (!stored) return readOnly();
+      const items = stored.map(display);
 
       const rows = el("div", { style: "display:flex; flex-direction:column; gap:6px; max-width:560px" });
       const renderRows = () => {
@@ -327,14 +325,9 @@ function detailBody(): Node[] {
     }
 
     case "Dictionary": {
-      let fields: [string, string][];
-      try {
-        fields = Object.entries(JSON.parse(detail.value) as Record<string, NectoJSONValue>).map(
-          ([key, value]) => [key, display(value)],
-        );
-      } catch {
-        fields = [];
-      }
+      const stored = dictionaryFields(detail.value);
+      if (!stored) return readOnly();
+      const fields = stored.map(([key, value]): [string, string] => [key, display(value)]);
 
       const rows = el("div", { style: "display:flex; flex-direction:column; gap:6px; max-width:560px" });
       const renderRows = () => {
@@ -403,14 +396,19 @@ function detailBody(): Node[] {
     }
 
     default:
-      // Data and anything unrecognised: shown, never edited. Writing base64 back
-      // through a text box is how a token gets corrupted.
-      return [
-        pairs(),
-        valueTitle(),
-        el("p", { class: "necto-caption" }, [t("{value} — not editable from here", { value: detail.value })]),
-        actions([]),
-      ];
+      return readOnly();
+  }
+
+  /// Data, anything unrecognised, and a container holding either: shown, never edited.
+  /// Writing base64 back through a text box is how a token gets corrupted, and a
+  /// container that cannot be read here cannot be saved from here without losing it.
+  function readOnly(): Node[] {
+    return [
+      pairs(),
+      valueTitle(),
+      el("p", { class: "necto-caption" }, [t("{value} — not editable from here", { value: detail?.value ?? "" })]),
+      actions([]),
+    ];
   }
 
   function pairs(): Node {
@@ -439,21 +437,6 @@ function detailBody(): Node[] {
     const save = el("button", { type: "button", class: "necto-button necto-button-primary" }, [t("Save")]);
     save.addEventListener("click", onSave);
     return save;
-  }
-
-  /// A string element shows as itself; anything structured shows as one line of JSON.
-  function display(value: NectoJSONValue): string {
-    return typeof value === "string" ? value : JSON.stringify(value);
-  }
-
-  /// The reverse: `47` is a number, `true` a Bool, `{"a":1}` an object, and anything
-  /// that is not JSON is the string it looks like.
-  function element(text: string): NectoJSONValue {
-    try {
-      return JSON.parse(text) as NectoJSONValue;
-    } catch {
-      return text;
-    }
   }
 
   function saveOnReturn(field: HTMLInputElement, save: HTMLButtonElement): void {
