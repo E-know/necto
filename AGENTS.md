@@ -22,11 +22,12 @@ does that in order.
 ## Layout
 
 ```text
-Sources/NectoModel        Manifest, operation and target types, schema validation
-Sources/NectoTransport    Shared byte streams, message framing and connection defaults
+SDK/iOS/Sources/NectoModel        Manifest, operation and target types, schema validation
+SDK/iOS/Sources/NectoTransport    Shared byte streams, message framing and connection defaults
 NectoMac/Sources/NectoCLIService   The control socket contract shared by Necto.app and necto-cli
 NectoMac/Sources/NectoMacService   Mac providers, routing, device connections and control server
-Sources/NectoSDK          The SDK and listener embedded in a connected app
+SDK/iOS/Sources/NectoSDK          The SDK and listener embedded in a connected app
+SDK/iOS/Tests/                   SDK tests and the standalone consumer fixture
 Necto/                    macOS shell, built by Necto.xcodeproj
 ExampleApp/              iOS sample app, built by Necto.xcodeproj
 WebPackages/BuiltInPlugins/          src/ is source, Plugins/ is the committed build output

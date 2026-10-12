@@ -7,7 +7,7 @@ import PackageDescription
 let package = Package(
     name: "SDKConsumer",
     platforms: [.macOS(.v14), .iOS(.v16)],
-    dependencies: [.package(name: "Necto", path: "../../..")],
+    dependencies: [.package(name: "Necto", path: "../../../../..")],
     targets: [
         .testTarget(
             name: "SDKConsumerTests",

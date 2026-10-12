@@ -158,7 +158,7 @@ covers when `binding.version` moves.
 
 ## Answering on the device
 
-[`NectoPlugin`](https://github.com/toss/necto/blob/main/Sources/NectoSDK/NectoPlugin.swift)
+[`NectoPlugin`](https://github.com/toss/necto/blob/main/SDK/iOS/Sources/NectoSDK/NectoPlugin.swift)
 requires you to implement `id` and `register(_:)`. Its `panel` property defaults to
 `nil`; plugins with a panel override it to point to the `Panel` directory in the
 module's resources.

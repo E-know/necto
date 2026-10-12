@@ -6,7 +6,7 @@ import { access, readFile, readdir, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-const defaultPanelRoot = resolve(root, "Sources/NectoDefaultPlugins/Panels");
+const defaultPanelRoot = resolve(root, "SDK/iOS/Sources/NectoDefaultPlugins/Panels");
 const panelRoots = (await readdir(defaultPanelRoot, { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
   .map((entry) => resolve(defaultPanelRoot, entry.name));

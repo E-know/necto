@@ -21,6 +21,8 @@ struct ManifestContractTests {
     private static let manifests = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent() // NectoSDKTests
         .deletingLastPathComponent() // Tests
+        .deletingLastPathComponent() // iOS
+        .deletingLastPathComponent() // SDK
         .deletingLastPathComponent() // repo root
         .appending(path: "WebPackages/BuiltInPlugins/src")
 

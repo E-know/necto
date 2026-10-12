@@ -10,7 +10,7 @@ import { defineConfig } from "vite";
 export default defineConfig({
   base: "./",
   build: {
-    outDir: "../../../../Sources/NectoDefaultPlugins/Panels/performance-monitor",
+    outDir: "../../../../SDK/iOS/Sources/NectoDefaultPlugins/Panels/performance-monitor",
     emptyOutDir: true,
     rollupOptions: {
       output: {

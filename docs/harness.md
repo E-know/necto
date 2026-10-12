@@ -54,7 +54,7 @@ Review feature boundaries in code; comments and identifier spellings are not tes
 
 ```bash
 node --test script/tests/package.test.mjs
-swift test --package-path Tests/Fixtures/SDKConsumer
+swift test --package-path SDK/iOS/Tests/Fixtures/SDKConsumer
 ```
 
 ## Rule 2: Necto does not decide how an app works
