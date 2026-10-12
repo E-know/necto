@@ -168,7 +168,7 @@ final class NectoControlRuntime {
                 return hit === owner || hit.isDescendant(of: owner) || owner.isDescendant(of: hit)
             }) else { throw unavailable("The target is covered by another view. Refresh Control before acting.") }
             method = "touch"
-            guard NectoTouchInjector.tap(points: points, in: window, tapCount: Int(taps)) else {
+            guard try await NectoTouchInjector.tap(points: points, in: window, tapCount: Int(taps)) else {
                 throw unavailable(NectoTouchInjector.unavailableReason)
             }
         case "swipe":
@@ -239,11 +239,14 @@ final class NectoControlRuntime {
 
     private func send(in window: UIWindow, from start: CGPoint, to end: CGPoint,
                       duration: TimeInterval, edge: Bool = false) async throws {
-        let sent = start == end
-            ? NectoTouchInjector.tap(points: [start], in: window)
-            : NectoTouchInjector.drag(from: start, to: end, in: window,
-                                      steps: edge ? NectoTouchInjector.defaultSwipeBackSteps : nil,
-                                      duration: duration, isFromEdge: edge)
+        let sent: Bool
+        if start == end {
+            sent = try await NectoTouchInjector.tap(points: [start], in: window)
+        } else {
+            sent = try await NectoTouchInjector.drag(from: start, to: end, in: window,
+                                                   steps: edge ? NectoTouchInjector.defaultSwipeBackSteps : nil,
+                                                   duration: duration, isFromEdge: edge)
+        }
         guard sent else { throw unavailable(NectoTouchInjector.unavailableReason) }
     }
 

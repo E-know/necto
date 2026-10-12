@@ -41,7 +41,8 @@ enum NectoTouchInjector {
         return "Runtime touch injection failed"
     }
 
-    static func tap(points: [CGPoint], in window: UIWindow, tapCount: Int = 1) -> Bool {
+    static func tap(points: [CGPoint], in window: UIWindow, tapCount: Int = 1) async throws -> Bool {
+        try Task.checkCancellation()
         guard !busy, (1...5).contains(points.count), (1...3).contains(tapCount) else { return false }
         busy = true
         defer { busy = false }
@@ -58,16 +59,17 @@ enum NectoTouchInjector {
         for index in 1...tapCount {
             guard send(touches: touches, phase: .began, points: points, resetPrevious: true, tapCount: index) else { return false }
             active = true
-            RunLoop.current.run(until: Date().addingTimeInterval(0.025))
+            try await Task.sleep(for: .milliseconds(25))
             guard send(touches: touches, phase: .ended, points: points, resetPrevious: false, tapCount: index) else { return false }
             active = false
-            if index < tapCount { RunLoop.current.run(until: Date().addingTimeInterval(0.1)) }
+            if index < tapCount { try await Task.sleep(for: .milliseconds(100)) }
         }
         return true
     }
 
     static func drag(from start: CGPoint, to end: CGPoint, in window: UIWindow,
-                     steps: Int? = nil, duration: Double? = nil, isFromEdge: Bool = false) -> Bool {
+                     steps: Int? = nil, duration: Double? = nil, isFromEdge: Bool = false) async throws -> Bool {
+        try Task.checkCancellation()
         guard !busy else { return false }
         busy = true
         defer { busy = false }
@@ -83,10 +85,11 @@ enum NectoTouchInjector {
             if active { _ = send(touches: [touch], phase: .cancelled, points: [point], resetPrevious: false) }
         }
         for index in 1...stepCount {
+            // Yield the main actor so app work scheduled by earlier touch handlers can run.
+            try await Task.sleep(for: .seconds(delay))
             let progress = CGFloat(index) / CGFloat(stepCount)
             point = CGPoint(x: start.x + (end.x - start.x) * progress,
                             y: start.y + (end.y - start.y) * progress)
-            RunLoop.current.run(until: Date().addingTimeInterval(delay))
             guard send(touches: [touch], phase: index == stepCount ? .ended : .moved,
                        points: [point], resetPrevious: false) else { return false }
         }
