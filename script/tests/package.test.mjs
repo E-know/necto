@@ -39,3 +39,8 @@ test("default plugin interfaces do not pull in capture implementations", () => {
     assert.ok(!visited.has(capture), `${capture} must remain an opt-in implementation`);
   }
 });
+
+test("Control runtime stays in the default plugins without a separate touch target", () => {
+  assert.ok(!manifest.targets.some(target => target.name === "NectoTouchInjection"));
+  assert.deepEqual(dependencies("NectoDefaultPlugins").sort(), ["NectoModel", "NectoSDK"]);
+});
