@@ -71,7 +71,7 @@ jobs:
       - name: Test SDK packages
         run: swift test --verbose
       - name: Test SDK consumer
-        run: swift test --package-path Tests/Fixtures/SDKConsumer --verbose
+        run: swift test --package-path SDK/iOS/Tests/Fixtures/SDKConsumer --verbose
       - name: Test package boundaries
         run: node --test script/tests/package.test.mjs
       - name: Build the iOS example

@@ -120,6 +120,11 @@ See [the trust policy](plugin-manifest.md#identity-and-trust).
 
 Libraries are managed as Swift packages, and app targets live in `Necto.xcodeproj`.
 
+The iOS SDK sources and tests live in `SDK/iOS/Sources` and `SDK/iOS/Tests`.
+`Package.swift` stays at the repository root so existing Swift package consumers
+keep the same repository URL, product and module names. The Mac package continues
+to reuse `NectoModel` and `NectoTransport` from that package.
+
 The root package exposes one product, `NectoSDK`, containing the SDK, shared modules
 and built-in plugins. Modules remain separate; apps import and register the plugins
 they use. The local `NectoMac/Package.swift` builds Mac services, `necto-cli` and their
@@ -128,5 +133,5 @@ dependency on the Mac package or ArgumentParser. Run `script/test swift` to test
 packages and the single-product consumer fixture.
 
 Panels are built by Yarn workspaces into the Swift packages that carry them —
-`Sources/NectoDefaultPlugins/Panels/<id>` for the defaults, the example app's bundle
+`SDK/iOS/Sources/NectoDefaultPlugins/Panels/<id>` for the defaults, the example app's bundle
 for the sample — and committed so that building the app alone needs no Node.

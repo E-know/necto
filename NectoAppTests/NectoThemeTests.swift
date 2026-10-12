@@ -14,7 +14,7 @@ struct NectoThemeTests {
     @Test("Shared and shipped styles match native colors in both appearances", arguments: [false, true])
     func renderedColors(isDark: Bool) async throws {
         let root = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-        let panelRoot = root.appending(path: "Sources/NectoDefaultPlugins/Panels")
+        let panelRoot = root.appending(path: "SDK/iOS/Sources/NectoDefaultPlugins/Panels")
         let panels = try FileManager.default.contentsOfDirectory(at: panelRoot, includingPropertiesForKeys: nil)
             .filter { $0.hasDirectoryPath }.map { $0.appending(path: "assets/index.css") }
         let styles = [root.appending(path: "WebPackages/Bridge/theme.css")] + panels + [

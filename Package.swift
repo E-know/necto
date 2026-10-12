@@ -15,13 +15,15 @@ let package = Package(
         ]),
     ],
     targets: [
-        .target(name: "NectoModel"),
+        .target(name: "NectoModel", path: "SDK/iOS/Sources/NectoModel"),
         .target(
-            name: "NectoTransport"
+            name: "NectoTransport",
+            path: "SDK/iOS/Sources/NectoTransport"
         ),
         .target(
             name: "NectoSDK",
-            dependencies: ["NectoModel", "NectoTransport"]
+            dependencies: ["NectoModel", "NectoTransport"],
+            path: "SDK/iOS/Sources/NectoSDK"
         ),
         .target(
             name: "NectoDefaultPlugins",
@@ -29,36 +31,43 @@ let package = Package(
                 "NectoModel", "NectoSDK",
                 .target(name: "NectoTouchInjection", condition: .when(platforms: [.iOS])),
             ],
+            path: "SDK/iOS/Sources/NectoDefaultPlugins",
             resources: [
                 .copy("Panels"),
             ]
         ),
-        .target(name: "NectoTouchInjection"),
+        .target(name: "NectoTouchInjection", path: "SDK/iOS/Sources/NectoTouchInjection"),
         // CPU, memory and frame-rate capture for apps that explicitly opt in.
         .target(
             name: "NectoProcessMetrics",
-            dependencies: ["NectoDefaultPlugins", "NectoModel", "NectoSDK"]
+            dependencies: ["NectoDefaultPlugins", "NectoModel", "NectoSDK"],
+            path: "SDK/iOS/Sources/NectoProcessMetrics"
         ),
         // Capture stays separate from the reporting API and starts only on registration.
         .target(
             name: "NectoURLSessionCapture",
-            dependencies: ["NectoDefaultPlugins", "NectoModel", "NectoSDK"]
+            dependencies: ["NectoDefaultPlugins", "NectoModel", "NectoSDK"],
+            path: "SDK/iOS/Sources/NectoURLSessionCapture"
         ),
         .testTarget(
             name: "NectoModelTests",
-            dependencies: ["NectoModel"]
+            dependencies: ["NectoModel"],
+            path: "SDK/iOS/Tests/NectoModelTests"
         ),
         .testTarget(
             name: "NectoTransportTests",
-            dependencies: ["NectoTransport"]
+            dependencies: ["NectoTransport"],
+            path: "SDK/iOS/Tests/NectoTransportTests"
         ),
         .testTarget(
             name: "NectoSDKTests",
-            dependencies: ["NectoSDK", "NectoDefaultPlugins", "NectoProcessMetrics", "NectoTransport", "NectoModel"]
+            dependencies: ["NectoSDK", "NectoDefaultPlugins", "NectoProcessMetrics", "NectoTransport", "NectoModel"],
+            path: "SDK/iOS/Tests/NectoSDKTests"
         ),
         .testTarget(
             name: "NectoProcessMetricsTests",
-            dependencies: ["NectoProcessMetrics", "NectoDefaultPlugins", "NectoSDK", "NectoModel"]
+            dependencies: ["NectoProcessMetrics", "NectoDefaultPlugins", "NectoSDK", "NectoModel"],
+            path: "SDK/iOS/Tests/NectoProcessMetricsTests"
         ),
     ]
 )

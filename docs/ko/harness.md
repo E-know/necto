@@ -50,7 +50,7 @@ Mac host  ── runtime ──┬─ host bridge      storage, targets, shell
 
 ```bash
 node --test script/tests/package.test.mjs
-swift test --package-path Tests/Fixtures/SDKConsumer
+swift test --package-path SDK/iOS/Tests/Fixtures/SDKConsumer
 ```
 
 ## 규칙 2: Necto는 앱이 동작하는 방식을 정하지 않아요
