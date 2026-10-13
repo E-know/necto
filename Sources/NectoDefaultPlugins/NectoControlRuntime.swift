@@ -5,7 +5,6 @@
 #if canImport(UIKit)
 import NectoModel
 import NectoSDK
-import NectoTouchInjection
 import UIKit
 
 @MainActor
@@ -34,12 +33,13 @@ final class NectoControlRuntime {
 
     func readAccessibility() -> [NectoAccessibilityItem] {
         guard let window = activeWindow else { return [] }
-        NectoAccessibilityLoader.prepare()
+        NectoTouchInjector.prepareAccessibility()
         return NectoAccessibilityReader.read(in: window)
     }
 
     private func children(of object: NSObject) -> [NSObject] {
-        if let elements = object.accessibilityElements { return elements.compactMap { $0 as? NSObject } }
+        // Hosting views can expose an empty AX array before accessibility is initialized.
+        if let elements = object.accessibilityElements, !elements.isEmpty { return elements.compactMap { $0 as? NSObject } }
         let count = object.accessibilityElementCount()
         if count > 0, count != NSNotFound {
             return (0..<count).compactMap { object.accessibilityElement(at: $0) as? NSObject }
@@ -56,6 +56,7 @@ final class NectoControlRuntime {
         if let field = object as? UITextField { return field.isEnabled ? ["tap", "input"] : [] }
         if let field = object as? UITextView { return field.isEditable ? ["tap", "input", "swipe"] : ["swipe"] }
         if let scroll = object as? UIScrollView { return scroll.isScrollEnabled ? ["swipe"] : [] }
+        if object is UIButton { return ["tap"] }
         guard object.isAccessibilityElement else { return [] }
         let traits = object.accessibilityTraits
         if traits.contains(.button) || traits.contains(.link) || traits.contains(.keyboardKey) { return ["tap"] }
@@ -109,7 +110,7 @@ final class NectoControlRuntime {
     func snapshot() -> [NectoControlTarget] {
         targets.removeAll()
         guard !performing, let window = activeWindow else { return [] }
-        NectoAccessibilityLoader.prepare()
+        NectoTouchInjector.prepareAccessibility()
         return entries(in: window).compactMap { object, owner, frame in
             let actions = actions(for: object)
             guard !actions.isEmpty,
@@ -117,15 +118,15 @@ final class NectoControlRuntime {
                   hit === owner || hit.isDescendant(of: owner) || owner.isDescendant(of: hit) else { return nil }
             let id = (identities.object(forKey: object) as String?) ?? UUID().uuidString
             identities.setObject(id as NSString, forKey: object)
-            targets[id] = Target(view: object as? UIView, element: object is UIView ? nil : object, owner: owner, frame: frame, label: object.accessibilityLabel, actions: actions)
+            targets[id] = Target(view: object as? UIView, element: object is UIView ? nil : object, owner: owner, frame: frame, label: NectoAccessibilityReader.label(of: object), actions: actions)
             let role = object is UIWindow ? "screen" : actions.contains("input") ? "textInput" : actions.contains("swipe") ? "scrollArea" : "button"
             let secure = (object as? UITextField)?.isSecureTextEntry ?? (object as? UITextView)?.isSecureTextEntry ?? false
             return NectoControlTarget(
-                id: id, role: role, label: object.accessibilityLabel,
+                id: id, role: role, label: NectoAccessibilityReader.label(of: object),
                 identifier: NectoAccessibilityReader.identifier(of: object),
                 frame: (frame.minX, frame.minY, frame.width, frame.height), actions: actions,
                 tapGestures: tapGestures(for: object),
-                value: object.accessibilityValue, isSecure: secure
+                value: NectoAccessibilityReader.value(of: object), isSecure: secure
             )
         }
     }
@@ -136,7 +137,7 @@ final class NectoControlRuntime {
               let object = target.object, let owner = target.owner, let window = activeWindow,
               target.actions.contains(operation), actions(for: object).contains(operation),
               entries(in: window).contains(where: { $0.0 === object }),
-              object.accessibilityLabel == target.label else {
+              NectoAccessibilityReader.label(of: object) == target.label else {
             throw unavailable("The target changed. Refresh Control before acting.")
         }
         let current = frame(of: object, owner: owner, in: window)
@@ -167,11 +168,8 @@ final class NectoControlRuntime {
                 return hit === owner || hit.isDescendant(of: owner) || owner.isDescendant(of: hit)
             }) else { throw unavailable("The target is covered by another view. Refresh Control before acting.") }
             method = "touch"
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                NectoTouchInjector.tap(in: window, points: points.map { NSValue(cgPoint: $0) }, tapCount: UInt(taps)) { error in
-                    if let error { continuation.resume(throwing: NectoBridgeError(code: .operationUnavailable, message: error)) }
-                    else { continuation.resume() }
-                }
+            guard try await NectoTouchInjector.tap(points: points, in: window, tapCount: Int(taps)) else {
+                throw unavailable(NectoTouchInjector.unavailableReason)
             }
         case "swipe":
             let ratio = input["distanceRatio"]?.numberValue ?? 0.6
@@ -206,9 +204,9 @@ final class NectoControlRuntime {
         case "back":
             // An edge swipe requests navigation; it does not force a controller pop.
             method = "edgeSwipe"
-            let start = CGPoint(x: window.bounds.minX + 1, y: window.bounds.midY)
-            let end = CGPoint(x: window.bounds.minX + window.bounds.width * 0.8, y: start.y)
-            try await send(in: window, from: start, to: end, duration: 0.4, edge: true)
+            let start = CGPoint(x: window.bounds.minX, y: window.bounds.midY)
+            let end = CGPoint(x: max(window.bounds.minX, window.bounds.maxX - 1), y: start.y)
+            try await send(in: window, from: start, to: end, duration: NectoTouchInjector.defaultSwipeBackDuration, edge: true)
         case "input":
             guard let text = input["text"]?.stringValue, let editor = object as? UIView & UITextInput,
                   let keyInput = object as? UIKeyInput else {
@@ -241,12 +239,15 @@ final class NectoControlRuntime {
 
     private func send(in window: UIWindow, from start: CGPoint, to end: CGPoint,
                       duration: TimeInterval, edge: Bool = false) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            NectoTouchInjector.send(in: window, from: start, to: end, duration: duration, edge: edge) { error in
-                if let error { continuation.resume(throwing: NectoBridgeError(code: .operationUnavailable, message: error)) }
-                else { continuation.resume() }
-            }
+        let sent: Bool
+        if start == end {
+            sent = try await NectoTouchInjector.tap(points: [start], in: window)
+        } else {
+            sent = try await NectoTouchInjector.drag(from: start, to: end, in: window,
+                                                   steps: edge ? NectoTouchInjector.defaultSwipeBackSteps : nil,
+                                                   duration: duration, isFromEdge: edge)
         }
+        guard sent else { throw unavailable(NectoTouchInjector.unavailableReason) }
     }
 
     private func unavailable(_ message: String) -> NectoBridgeError {

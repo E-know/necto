@@ -34,6 +34,23 @@ builds, release packaging tests, and a fresh vulnerability scan.
 | Connection lifecycle or CLI device operations | `script/test e2e` |
 | Contract change | Update fixtures in the same commit |
 
+`node --test script/tests/package.test.mjs` checks SDK module boundaries, including
+Control's implementation inside `NectoDefaultPlugins` without a separate touch target.
+For touch-runtime changes, inspect all Mach-O files in the final Debug and Release
+iOS apps: the known private selectors must not appear in `__objc_methname`,
+`__objc_selrefs`, or undefined Objective-C message-send symbols. Runtime lookup
+strings will still be present. This checks the binary representation, not whether
+the APIs are public or whether Apple's upload validation will accept the app.
+
+Run touch checks in a freshly launched ExampleApp before attaching a runtime
+inspector: an inspector can initialize accessibility and hide discovery limitations.
+Use Loupe's external simulator screenshot mode for this baseline. Verify all 15
+native finger/tap configurations, input, positioned taps, scroll, and edge-back by
+observing changed content. Also verify SwiftUI virtual target discovery, tap,
+Unicode input, navigation, edge-back, scrolling and covered content exclusion.
+`node script/tests/control-e2e.mjs <device-id> <dedicated-example-bundle-id>`
+runs both UIKit and SwiftUI checks over the real host.
+
 `script/test` runs Swift and Vitest unit tests, native cache and WebView integration
 tests, package/release contracts and panel asset checks. Check layouts and localized
 copy in the plugin preview. Passing tests does not verify UI or transport changes;

@@ -20,7 +20,8 @@ enum NectoAccessibilityReader {
             let field = view as? UITextField
             let textView = view as? UITextView
             let secure = field?.isSecureTextEntry ?? textView?.isSecureTextEntry ?? false
-            if object.isAccessibilityElement {
+            // Native controls expose their content before the system builds its AX tree.
+            if object.isAccessibilityElement || view is UILabel || view is UIButton || field != nil || textView != nil {
                 let frame: CGRect
                 if let view {
                     frame = view.convert(view.bounds, to: window)
@@ -31,8 +32,8 @@ enum NectoAccessibilityReader {
                 if bounds.width > 1, bounds.height > 1, !bounds.isNull,
                    let hit = window.hitTest(CGPoint(x: bounds.midX, y: bounds.midY), with: nil),
                    hit === container || hit.isDescendant(of: container) || container.isDescendant(of: hit) {
-                    let label = object.accessibilityLabel
-                    let value = secure ? nil : object.accessibilityValue
+                    let label = label(of: object)
+                    let value = secure ? nil : value(of: object)
                     let identifier = identifier(of: object)
                     if label != nil || value != nil || identifier != nil {
                         items.append(NectoAccessibilityItem(
@@ -46,7 +47,7 @@ enum NectoAccessibilityReader {
             }
 
             if secure { return }
-            if let children = object.accessibilityElements {
+            if let children = object.accessibilityElements, !children.isEmpty {
                 for case let child as NSObject in children { walk(child, owner: container) }
                 return
             }
@@ -72,6 +73,14 @@ enum NectoAccessibilityReader {
         let selector = NSSelectorFromString("accessibilityIdentifier")
         guard object.responds(to: selector) else { return nil }
         return object.perform(selector)?.takeUnretainedValue() as? String
+    }
+
+    static func label(of object: NSObject) -> String? {
+        object.accessibilityLabel ?? (object as? UILabel)?.text ?? (object as? UIButton)?.currentTitle
+    }
+
+    static func value(of object: NSObject) -> String? {
+        object.accessibilityValue ?? (object as? UITextField)?.text ?? (object as? UITextView)?.text
     }
 
     private static func isVisible(_ view: UIView, in window: UIWindow) -> Bool {

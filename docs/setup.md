@@ -59,6 +59,25 @@ Do not run debugging tools in builds distributed to users.
 Calls inside `#if DEBUG` are excluded when `DEBUG` is not defined. Check that your
 Release build settings do not define `DEBUG`.
 
+The built-in UI Control provider synthesizes touches using private UIKit and
+IOHID entry points. Its Swift implementation lives in `NectoDefaultPlugins` and
+resolves selectors and C functions at runtime instead of linking Objective-C
+private method declarations. It supports positioned taps, 1–5 simultaneous fingers,
+1–3 successive taps, swipes, and edge-back gestures. Native controls and text inputs
+are discovered through public UIKit properties. SwiftUI support additionally enables
+application accessibility through `_AXSApplicationAccessibilitySetEnabled` and
+routes each touch through `_UIHitTestContext`, `_hitTestWithContext:` and
+`_setResponder:`. These use the same runtime symbol resolver; there is no separate
+`libAccessibility.dylib` load or `_accessibilityInit` call. If these runtime entry
+points are missing, SwiftUI target discovery or touch delivery may be unavailable.
+Runtime lookup does not make these APIs public.
+Missing required touch entry points return `OPERATION_UNAVAILABLE`. OS changes can still
+break the implementation, and Swift cannot catch Objective-C exceptions.
+
+Runtime lookup is not a guarantee of App Store Connect or TestFlight acceptance.
+Inspect the final app and embedded frameworks, and keep the debugging tool out of
+builds distributed to users.
+
 `NectoSDK.start()` starts the listener. However, `URLSessionNetworkPlugin` starts
 capture when registered, so guard plugin creation and registration as well as `start()`.
 
