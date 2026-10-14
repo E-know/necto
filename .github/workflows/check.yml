@@ -33,7 +33,24 @@ jobs:
           xcodebuild -version
           swift --version
       - name: Test Mac and CLI packages
-        run: swift test --package-path NectoMac --verbose
+        run: |
+          swift test --package-path NectoMac --verbose &
+          test_pid=$!
+          (
+            trap 'kill $(jobs -p) 2>/dev/null || true' EXIT
+            trap 'exit 0' TERM
+            sleep 180 &
+            wait $!
+            # Capture the blocked stacks before the job timeout destroys the runner.
+            for pid in "$test_pid" $(pgrep -P "$test_pid" || true); do
+              echo "::group::Process sample $pid"
+              sample "$pid" 3 1 -file /dev/stdout || true
+              echo "::endgroup::"
+            done
+          ) &
+          diagnostics_pid=$!
+          trap 'kill "$diagnostics_pid" 2>/dev/null || true; wait "$diagnostics_pid" 2>/dev/null || true' EXIT
+          wait "$test_pid"
       - name: Test native integrations and Mac app
         run: script/test native
       - name: Build the Mac app, CLI and E2E tests
