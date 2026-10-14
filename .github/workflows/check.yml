@@ -34,23 +34,27 @@ jobs:
           swift --version
       - name: Test Mac and CLI packages
         run: |
-          swift test --package-path NectoMac --verbose &
-          test_pid=$!
-          (
-            trap 'kill $(jobs -p) 2>/dev/null || true' EXIT
-            trap 'exit 0' TERM
-            sleep 180 &
-            wait $!
-            # Capture the blocked stacks before the job timeout destroys the runner.
-            for pid in "$test_pid" $(pgrep -P "$test_pid" || true); do
-              echo "::group::Process sample $pid"
-              sample "$pid" 3 1 -file /dev/stdout || true
-              echo "::endgroup::"
-            done
-          ) &
-          diagnostics_pid=$!
-          trap 'kill "$diagnostics_pid" 2>/dev/null || true; wait "$diagnostics_pid" 2>/dev/null || true' EXIT
-          wait "$test_pid"
+          for attempt in {1..20}; do
+            echo "Mac package test attempt $attempt"
+            swift test --package-path NectoMac --verbose &
+            test_pid=$!
+            python3 - "$test_pid" <<'PYTHON' &
+          import subprocess
+          import sys
+          import time
+          time.sleep(180)
+          children = subprocess.run(["pgrep", "-P", sys.argv[1]], capture_output=True, text=True).stdout.split()
+          for pid in [sys.argv[1], *children]:
+              print(f"::group::Process sample {pid}", flush=True)
+              subprocess.run(["sample", pid, "3", "1", "-file", "/dev/stdout"], check=False)
+              print("::endgroup::", flush=True)
+          PYTHON
+            diagnostics_pid=$!
+            trap 'kill -KILL "$diagnostics_pid" 2>/dev/null || true; wait "$diagnostics_pid" 2>/dev/null || true' EXIT
+            wait "$test_pid"
+            kill -KILL "$diagnostics_pid" 2>/dev/null || true
+            wait "$diagnostics_pid" 2>/dev/null || true
+          done
       - name: Test native integrations and Mac app
         run: script/test native
       - name: Build the Mac app, CLI and E2E tests
