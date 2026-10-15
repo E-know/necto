@@ -172,7 +172,7 @@ enum NectoBridgeText {
         while end.samePosition(in: text.unicodeScalars) == nil {
             text.utf8.formIndex(before: &end)
         }
-        return "\(text.unicodeScalars[..<end])… (truncated, \(byteCount) bytes)"
+        return String(text.unicodeScalars[..<end]) + "… (truncated, \(byteCount) bytes)"
     }
 
     /// The exception's own message when WebKit passes one along, which is what a
