@@ -5,6 +5,7 @@
 import NectoDefaultPlugins
 import NectoSDK
 import NectoURLSessionCapture
+import NectoWebViewCapture
 import SwiftUI
 
 /// Verifies SDK connection and plugin behaviour on a device or a simulator.
@@ -18,7 +19,8 @@ struct ExampleApp: App {
         // ready-made capture wired in. An app with its own stack registers
         // `NectoNetworkPlugin()` instead and calls `report(_:)` from wherever it
         // already knows about a request.
-        NectoSDK.register(URLSessionNetworkPlugin())
+        let network = URLSessionNetworkPlugin()
+        NectoSDK.register(network)
 
         // The other direction: a capability the Mac can call into rather than one
         // that only pushes.
@@ -28,6 +30,10 @@ struct ExampleApp: App {
         // optional. An app that wants neither simply does not link them.
         NectoSDK.register(ExampleTelemetry.events)
         NectoSDK.register(ExampleTelemetry.performance)
+
+        // The WebView screen's page traffic and bridge messages, reported to the two
+        // plugins above. It has to run before the first WKWebView is created.
+        NectoWebViewCapture.install(network: network.network, events: ExampleTelemetry.events)
 
         // These need nothing reported: they read what is already there. The seeds give
         // both panels something real to show on a fresh install.

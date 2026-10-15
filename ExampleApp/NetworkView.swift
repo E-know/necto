@@ -96,6 +96,14 @@ struct NetworkView: View {
                 }
                 .disabled(isRunning)
 
+                Section {
+                    NavigationLink("WebView") {
+                        WebViewDemoView()
+                    }
+                } footer: {
+                    Text("A page whose requests and bridge messages Necto captures.")
+                }
+
                 if !attempts.isEmpty {
                     Section("Recent") {
                         ForEach(attempts) { attempt in
