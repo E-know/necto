@@ -115,6 +115,12 @@ final class TestServer: NSObject, WKURLSchemeHandler {
         case "/euc-kr":
             respond(task, url: url, type: "text/plain; charset=euc-kr", data: Self.eucKR)
 
+        case "/local":
+            // What a scheme handler serving local files often answers: no HTTP status.
+            task.didReceive(URLResponse(url: url, mimeType: "text/plain", expectedContentLength: 5, textEncodingName: "utf-8"))
+            task.didReceive(Data("local".utf8))
+            task.didFinish()
+
         case "/broken-utf8":
             respond(task, url: url, type: "text/plain", data: Data([0x68, 0x69, 0xEC, 0x95]))
 

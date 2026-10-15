@@ -343,6 +343,25 @@ final class NectoWebViewCaptureTests {
         #expect(body.text?.hasPrefix("가가가") == true)
     }
 
+    /// Status 0 means no response arrived, except for a response that is not HTTP,
+    /// which an app's own scheme handler often sends for local files.
+    @Test("an XHR answered without an HTTP status still completes")
+    func xhrWithoutHTTPStatus() async throws {
+        let page = try await page().open()
+        let text = try await page.run("""
+            return await new Promise((resolve) => {
+              const request = new XMLHttpRequest();
+              request.onload = () => resolve(request.status + ':' + request.responseText);
+              request.open('GET', '/local');
+              request.send();
+            });
+            """)
+        let record = try #require(try await page.records("/local", count: 2).last)
+        #expect(text as? String == "\(record.statusCode ?? -1):local")
+        #expect(record.state == .completed)
+        #expect(record.responseBody?.text == "local")
+    }
+
     // MARK: What the page sees
 
     @Test("a request body with a lone surrogate is still reported")
