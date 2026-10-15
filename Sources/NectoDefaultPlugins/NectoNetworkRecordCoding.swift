@@ -32,6 +32,9 @@ public enum NectoNetworkRecordCoding {
         if let error = record.errorSummary {
             object["errorSummary"] = .string(error)
         }
+        if let source = record.source {
+            object["source"] = .string(source)
+        }
         return .object(object)
     }
 

@@ -154,6 +154,36 @@ struct NectoEventsPluginTests {
     }
 }
 
+@Suite("Network record coding")
+struct NectoNetworkRecordCodingTests {
+    private func record(source: String?) -> NectoNetworkRecord {
+        NectoNetworkRecord(
+            id: "r1",
+            method: "GET",
+            url: "https://api.example.com/v2/posts",
+            startedAtMilliseconds: 1_772_000_000_000,
+            state: .completed,
+            statusCode: 200,
+            source: source
+        )
+    }
+
+    @Test("says where a request came from when a capture set it")
+    func codesSourceWhenSet() {
+        let record = record(source: "WebView")
+        #expect(NectoNetworkRecordCoding.summary(record)["source"] == .string("WebView"))
+        #expect(NectoNetworkRecordCoding.detail(record)["source"] == .string("WebView"))
+    }
+
+    /// A request the app reports itself has no source, and a row should not claim one.
+    @Test("leaves the source out for the app's own requests")
+    func omitsSourceWhenNil() {
+        let record = record(source: nil)
+        #expect(NectoNetworkRecordCoding.summary(record)["source"] == nil)
+        #expect(NectoNetworkRecordCoding.detail(record)["source"] == nil)
+    }
+}
+
 @Suite("Performance plugin")
 struct NectoPerformancePluginTests {
     private let frame = NectoMetric(id: "frame", title: "Frame time", unit: "ms", budget: .atMost(16.7))

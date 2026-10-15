@@ -49,6 +49,8 @@ public struct NectoNetworkRecord: Sendable, Hashable, Codable, Identifiable {
             text = Self.looksTextual(contentType) ? String(data: capped, encoding: .utf8) : nil
         }
 
+        /// `capture.js` in `NectoWebViewCapture` applies the same rule to page traffic.
+        /// Change both together.
         private static func looksTextual(_ contentType: String?) -> Bool {
             guard let contentType = contentType?.lowercased() else { return true }
             return contentType.contains("json")
@@ -72,6 +74,9 @@ public struct NectoNetworkRecord: Sendable, Hashable, Codable, Identifiable {
     public let responseHeaders: [String: String]
     public let requestBody: Body?
     public let responseBody: Body?
+    /// Where the request came from when it was not the app's own networking,
+    /// for example `WebView`. Absent for requests the app reports itself.
+    public let source: String?
 
     public init(
         id: String,
@@ -86,7 +91,8 @@ public struct NectoNetworkRecord: Sendable, Hashable, Codable, Identifiable {
         requestHeaders: [String: String] = [:],
         responseHeaders: [String: String] = [:],
         requestBody: Body? = nil,
-        responseBody: Body? = nil
+        responseBody: Body? = nil,
+        source: String? = nil
     ) {
         self.id = id
         self.method = method
@@ -101,6 +107,7 @@ public struct NectoNetworkRecord: Sendable, Hashable, Codable, Identifiable {
         self.responseHeaders = responseHeaders
         self.requestBody = requestBody
         self.responseBody = responseBody
+        self.source = source
     }
 
     /// The last path segment, which is what identifies a request when scanning a list.

@@ -79,13 +79,54 @@ struct ManifestContractTests {
             state: .completed,
             statusCode: 200,
             durationMilliseconds: 103,
-            responseByteCount: 68
+            responseByteCount: 68,
+            source: "WebView"
         )
         plugin.report(record)
 
         try await check(plugin, "necto.device.network-records.list", in: "network-logger")
         try await check(plugin, "necto.device.network-records.detail", in: "network-logger", input: ["recordID": .string("r1")])
         try await check(plugin, "necto.device.network-records.clear", in: "network-logger")
+    }
+
+    /// The record schemas allow extra properties, so a field the coding adds passes
+    /// validation without the manifest ever mentioning it. Agents read the manifest to
+    /// learn what a record holds, so every coded field has to be declared there.
+    @Test("the network manifest declares every field a record is coded with")
+    func networkManifestDeclaresEveryField() throws {
+        let body = NectoNetworkRecord.Body(byteCount: 2, isTruncated: false, contentType: "application/json", text: "{}")
+        let record = NectoNetworkRecord(
+            id: "r1",
+            method: "POST",
+            url: "https://api.example.com/v2/posts",
+            startedAtMilliseconds: 1_772_000_000_000,
+            state: .completed,
+            statusCode: 201,
+            durationMilliseconds: 103,
+            responseByteCount: 2,
+            errorSummary: "none",
+            requestHeaders: ["Accept": "application/json"],
+            responseHeaders: ["Content-Type": "application/json"],
+            requestBody: body,
+            responseBody: body,
+            source: "WebView"
+        )
+        let operations = try operations(of: "network-logger")
+        let coded: [(String, NectoJSONValue, (NectoJSONValue) -> NectoJSONValue?)] = [
+            ("necto.device.network-records.list", NectoNetworkRecordCoding.summary(record),
+             { $0["properties"]?["records"]?["items"] }),
+            ("necto.device.network-records.detail", NectoNetworkRecordCoding.detail(record),
+             { $0["properties"]?["record"] }),
+            ("necto.device.network-records.observe", NectoNetworkRecordCoding.summary(record),
+             { $0["properties"]?["record"] }),
+        ]
+        for (key, value, recordSchema) in coded {
+            let output = try #require(operations[key]?["outputSchema"], "\(key) has no outputSchema")
+            let declared = try #require(recordSchema(output)?["properties"]?.objectValue, "\(key) declares no record")
+            for field in try #require(value.objectValue).keys {
+                #expect(declared[field] != nil, "\(key) does not declare \(field)")
+            }
+        }
     }
 
     @Test("what the performance plugin returns is what its manifest promised")
