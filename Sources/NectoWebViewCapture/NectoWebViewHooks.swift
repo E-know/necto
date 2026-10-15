@@ -133,8 +133,10 @@ enum NectoWebViewHooks {
         ) { original, selector in
             let block: @MainActor @convention(block) (WKWebView, NSString, NSDictionary?, WKFrameInfo?, WKContentWorld, Completion?) -> Void = {
                 webView, body, arguments, frame, world, completion in
+                // A copy, so the event shows the arguments of the call even if a mutable
+                // dictionary changes before it finishes.
                 NectoPageCall.run(
-                    "callAsyncJavaScript", script: body as String, arguments: arguments ?? [:],
+                    "callAsyncJavaScript", script: body as String, arguments: (arguments?.copy() as? NSDictionary) ?? [:],
                     page: frame?.request.url ?? webView.url, completion: completion
                 ) { completion in
                     original.invoke(webView, selector, body, arguments, frame, world, completion)

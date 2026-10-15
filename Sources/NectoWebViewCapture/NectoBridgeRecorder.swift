@@ -80,8 +80,12 @@ enum NectoBridgeEvents {
         handler is NectoBridgeRecorder || handler is NectoBridgeReplyRecorder || handler is NectoWebViewCaptureReceiver
     }
 
+    // Each checks for reporters before it builds anything: a recorder or a completion
+    // wrapped while capture was on outlives `uninstall`, and a payload can be large.
+
     static func received(_ message: WKScriptMessage) {
-        report(.info, "web → app · \(message.name)", at: Date(), [
+        guard let events = NectoWebViewReporters.installed?.events else { return }
+        report(to: events, .info, "web → app · \(message.name)", at: Date(), [
             "body": NectoBridgeText.json(message.body),
             "page": message.frameInfo.request.url?.absoluteString ?? "",
             "frame": message.frameInfo.isMainFrame ? "main" : "sub",
@@ -89,13 +93,14 @@ enum NectoBridgeEvents {
     }
 
     static func replied(_ name: String, page: URL?, reply: Any?, error: String?) {
+        guard let events = NectoWebViewReporters.installed?.events else { return }
         var detail = ["page": page?.absoluteString ?? ""]
         if let error {
             detail["error"] = error
         } else {
             detail["reply"] = NectoBridgeText.json(reply)
         }
-        report(error == nil ? .info : .error, "app → web · \(name) reply", at: Date(), detail)
+        report(to: events, error == nil ? .info : .error, "app → web · \(name) reply", at: Date(), detail)
     }
 
     static func called(
@@ -107,6 +112,7 @@ enum NectoBridgeEvents {
         result: Any?,
         error: NSError?
     ) {
+        guard let events = NectoWebViewReporters.installed?.events else { return }
         var detail = [
             "script": script,
             "page": page?.absoluteString ?? "",
@@ -128,11 +134,16 @@ enum NectoBridgeEvents {
         } else {
             detail["result"] = NectoBridgeText.json(result)
         }
-        report(level, "app → web · \(method)", at: calledAt, detail)
+        report(to: events, level, "app → web · \(method)", at: calledAt, detail)
     }
 
-    private static func report(_ level: NectoEvent.Level, _ message: String, at: Date, _ detail: [String: String]) {
-        guard let events = NectoWebViewReporters.installed?.events else { return }
+    private static func report(
+        to events: any NectoEventReporting,
+        _ level: NectoEvent.Level,
+        _ message: String,
+        at: Date,
+        _ detail: [String: String]
+    ) {
         events.report(NectoEvent(
             at: at,
             level: level,
