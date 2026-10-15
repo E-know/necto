@@ -4,9 +4,10 @@
 
 import Foundation
 import NectoDefaultPlugins
-import NectoWebViewCapture
 import Testing
 import WebKit
+
+@testable import NectoWebViewCapture
 
 /// Capture is process-wide, so every test runs alone and installs its own reports.
 @MainActor
@@ -33,7 +34,13 @@ final class NectoWebViewCaptureTests {
         let records = try await page.records("/json", count: 2)
         #expect(records.map(\.state) == [.pending, .completed])
         #expect(Set(records.map(\.id)).count == 1)
+        #expect(Set(records.map(\.startedAtMilliseconds)).count == 1)
         #expect(records.allSatisfy { $0.source == "WebView" })
+
+        let pending = try #require(records.first)
+        #expect(pending.statusCode == nil)
+        #expect(pending.durationMilliseconds == nil)
+        #expect(pending.responseBody == nil)
 
         let completed = try #require(records.last)
         #expect(completed.method == "GET")
@@ -43,8 +50,55 @@ final class NectoWebViewCaptureTests {
         #expect(completed.responseBody?.text == #"{"hello":"world"}"#)
         #expect(completed.responseBody?.contentType == "application/json")
         #expect(completed.responseByteCount == 17)
-        #expect(completed.durationMilliseconds != nil)
+        #expect((0 ..< 10_000).contains(completed.durationMilliseconds ?? -1))
         #expect(abs(completed.startedAtMilliseconds - Date().timeIntervalSince1970 * 1000) < 60_000)
+
+        // The script's own channel is not an app bridge, so it never reaches Event Log.
+        #expect(!reports.events.contains { $0.message.contains("nectoWebViewCapture") })
+    }
+
+    @Test("requests made at once get ids of their own")
+    func distinctIDs() async throws {
+        let page = try await page().open()
+        try await page.run("await Promise.all([fetch('/json'), fetch('/json'), fetch('/json')])")
+
+        let records = try await page.records("/json", count: 6)
+        #expect(Set(records.map(\.id)).count == 3)
+    }
+
+    /// `crypto.randomUUID` exists only in a secure context. A page from plain HTTP
+    /// falls back to ids of the script's own making.
+    @Test("a page outside a secure context still gets distinct ids")
+    func distinctIDsWithoutRandomUUID() async throws {
+        let page = page()
+        page.webView.loadHTMLString("<p>insecure</p>", baseURL: URL(string: "http://\(page.host).invalid/"))
+        try await waitUntil("the page") { !page.webView.isLoading && page.webView.url != nil }
+        let secure = try await page.run("return window.isSecureContext")
+        #expect(secure as? Bool == false)
+
+        try await page.run("await Promise.allSettled([fetch('/one'), fetch('/two')])")
+        try await waitUntil("both requests to fail") {
+            reports.records.filter { $0.url.contains(page.host) && $0.state == .failed }.count == 2
+        }
+        let ids = Set(reports.records.filter { $0.url.contains(page.host) }.map(\.id))
+        #expect(ids.count == 2)
+    }
+
+    @Test("a Request object gives the method, URL and headers, and init replaces its headers")
+    func fetchRequestObject() async throws {
+        let page = try await page().open()
+        try await page.run("""
+            await fetch(new Request('/json', { method: 'PUT', headers: { 'X-From': 'request' } }));
+            await fetch(new Request('/created', { headers: { 'X-From': 'request' } }), { headers: { 'X-Other': 'init' } });
+            """)
+
+        let put = try #require(try await page.records("/json", count: 2).last)
+        #expect(put.method == "PUT")
+        #expect(put.url == page.url("/json").absoluteString)
+        #expect(put.requestHeaders["x-from"] == "request")
+
+        let replaced = try #require(try await page.records("/created", count: 2).last)
+        #expect(replaced.requestHeaders == ["x-other": "init"])
     }
 
     @Test("fetch POST keeps a JSON body as text and a form as its size")
@@ -73,7 +127,8 @@ final class NectoWebViewCaptureTests {
         let form = try #require(try await page.records("/json", count: 2).last)
         #expect(form.method == "POST")
         #expect(form.requestBody?.text == nil)
-        #expect((form.requestBody?.byteCount ?? 0) > 0)
+        // The fields' own sizes: "necto" and "12345".
+        #expect(form.requestBody?.byteCount == 10)
     }
 
     @Test("a failing fetch is reported failed and still rejects in the page")
@@ -86,8 +141,8 @@ final class NectoWebViewCaptureTests {
 
         let records = try await page.records("/fail", count: 2)
         #expect(records.map(\.state) == [.pending, .failed])
-        #expect(records.last?.errorSummary?.isEmpty == false)
-        #expect(records.last?.durationMilliseconds != nil)
+        #expect(records.last?.errorSummary?.hasPrefix("TypeError") == true)
+        #expect((0 ..< 10_000).contains(records.last?.durationMilliseconds ?? -1))
     }
 
     @Test("a body past the cap is cut, keeps its full size, and is marked")
@@ -102,6 +157,35 @@ final class NectoWebViewCaptureTests {
         #expect(body.byteCount == TestServer.largeByteCount)
         #expect(body.text?.utf8.count == NectoNetworkRecord.Body.captureLimit)
         #expect(completed.responseByteCount == TestServer.largeByteCount)
+    }
+
+    /// The cap falls inside a three-byte character. The half character is held back
+    /// rather than turning the whole body into binary.
+    @Test("a body cut inside a character keeps its text")
+    func fetchTruncationInsideCharacter() async throws {
+        let page = try await page().open()
+        try await page.run("await (await fetch('/wide')).text()")
+
+        let body = try #require(try await page.records("/wide", count: 2).last?.responseBody)
+        #expect(body.isTruncated)
+        #expect(body.byteCount == TestServer.wideCharacterCount * 3)
+        #expect(body.text?.count == NectoNetworkRecord.Body.captureLimit / 3)
+    }
+
+    @Test("a binary body keeps its size, and an empty one is left out")
+    func fetchBinaryAndEmpty() async throws {
+        let page = try await page().open()
+        try await page.run("await (await fetch('/binary')).text(); await fetch('/empty')")
+
+        let binary = try #require(try await page.records("/binary", count: 2).last)
+        #expect(binary.responseBody?.byteCount == 6)
+        #expect(binary.responseBody?.text == nil)
+        #expect(binary.responseBody?.contentType == "application/octet-stream")
+
+        let empty = try #require(try await page.records("/empty", count: 2).last)
+        #expect(empty.state == .completed)
+        #expect(empty.statusCode == 204)
+        #expect(empty.responseBody == nil)
     }
 
     @Test("an event stream completes when its headers arrive, without a body")
@@ -154,6 +238,195 @@ final class NectoWebViewCaptureTests {
         let failure = try await page.records("/fail", count: 2)
         #expect(failure.map(\.state) == [.pending, .failed])
         #expect(Set(failure.map(\.id)).count == 1)
+        #expect(failure.last?.errorSummary == "The request failed.")
+
+        #expect(!reports.events.contains { $0.message.contains("nectoWebViewCapture") })
+    }
+
+    @Test("an XHR used again from its own onload reports both requests")
+    func xhrReusedFromOnload() async throws {
+        let page = try await page().open()
+        let status = try await page.run("""
+            return await new Promise((resolve) => {
+              const request = new XMLHttpRequest();
+              let loads = 0;
+              request.onload = () => {
+                if (loads++ === 0) {
+                  request.open('GET', '/created');
+                  request.send();
+                } else {
+                  resolve(request.status);
+                }
+              };
+              request.open('GET', '/json');
+              request.send();
+            });
+            """)
+        #expect(status as? Int == 201)
+
+        let first = try #require(try await page.records("/json", count: 2).last)
+        #expect(first.state == .completed)
+        #expect(first.statusCode == 200)
+        #expect(first.responseBody?.text == #"{"hello":"world"}"#)
+        let second = try #require(try await page.records("/created", count: 2).last)
+        #expect(second.state == .completed)
+        #expect(second.statusCode == 201)
+    }
+
+    @Test("aborting an XHR that has finished keeps its answer")
+    func xhrAbortedAfterLoad() async throws {
+        let page = try await page().open()
+        try await page.run("""
+            await new Promise((resolve) => {
+              const request = new XMLHttpRequest();
+              request.onload = () => { request.abort(); resolve(); };
+              request.open('GET', '/json');
+              request.send();
+            });
+            """)
+        let record = try #require(try await page.records("/json", count: 2).last)
+        #expect(record.state == .completed)
+        #expect(record.statusCode == 200)
+    }
+
+    @Test("opening an XHR again while it is in flight ends the first request")
+    func xhrReopenedInFlight() async throws {
+        let page = try await page().open()
+        try await page.run("""
+            await new Promise((resolve) => {
+              const request = new XMLHttpRequest();
+              request.open('GET', '/events');
+              request.send();
+              request.open('GET', '/json');
+              request.onloadend = resolve;
+              request.send();
+            });
+            """)
+        let abandoned = try #require(try await page.records("/events", count: 2).last)
+        #expect(abandoned.state == .failed)
+        #expect(abandoned.errorSummary == "The request was aborted.")
+        let current = try #require(try await page.records("/json", count: 2).last)
+        #expect(current.state == .completed)
+        #expect(current.responseBody?.text == #"{"hello":"world"}"#)
+    }
+
+    @Test("a synchronous XHR that fails is reported failed once")
+    func syncXHRFailure() async throws {
+        let page = try await page().open()
+        let thrown = try await page.run("""
+            const request = new XMLHttpRequest();
+            request.open('GET', '/fail', false);
+            try { request.send(); return 'sent'; } catch (error) { return error.name; }
+            """)
+        #expect(thrown as? String == "NetworkError")
+        let records = try await page.records("/fail", count: 2)
+        #expect(records.map(\.state) == [.pending, .failed])
+    }
+
+    /// The text is decoded with the response's charset, then kept as UTF-8, so a body
+    /// can cross the cap only once it is text.
+    @Test("a large XHR text body in another charset keeps its text")
+    func xhrLargeTextInAnotherCharset() async throws {
+        let page = try await page().open()
+        let length = try await page.run("""
+            return await new Promise((resolve) => {
+              const request = new XMLHttpRequest();
+              request.onload = () => resolve(request.responseText.length);
+              request.open('GET', '/euc-kr');
+              request.send();
+            });
+            """)
+        #expect(length as? Int == TestServer.eucKRCharacterCount)
+
+        let body = try #require(try await page.records("/euc-kr", count: 2).last?.responseBody)
+        #expect(body.isTruncated)
+        #expect(body.text?.hasPrefix("가가가") == true)
+    }
+
+    // MARK: What the page sees
+
+    @Test("a request body with a lone surrogate is still reported")
+    func loneSurrogate() async throws {
+        let page = try await page().open()
+        try await page.run(#"await fetch('/created', { method: 'POST', body: 'a\ud800b' })"#)
+        let record = try #require(try await page.records("/created", count: 2).last)
+        #expect(record.state == .completed)
+        #expect(record.requestBody?.text == "a\u{FFFD}b")
+    }
+
+    @Test("the page gets its own abort reason back")
+    func abortReason() async throws {
+        let page = try await page().open()
+        let same = try await page.run("""
+            const controller = new AbortController();
+            const reason = Object.create(null);
+            controller.abort(reason);
+            try { await fetch('/json', { signal: controller.signal }); return false; } catch (error) { return error === reason; }
+            """)
+        #expect(same as? Bool == true)
+        #expect(try await page.records("/json", count: 2).last?.state == .failed)
+    }
+
+    @Test("headers given as a generator still reach the network")
+    func generatorHeaders() async throws {
+        let page = try await page().open()
+        let sent = try await page.run("""
+            function* headers() { yield ['X-Generated', 'yes']; }
+            return (await (await fetch('/echo-headers', { headers: headers() })).json())['x-generated'];
+            """)
+        #expect(sent as? String == "yes")
+        _ = try await page.records("/echo-headers", count: 2)
+    }
+
+    @Test("a page that replaces globals still gets a complete record")
+    func replacedGlobals() async throws {
+        let page = try await page().open()
+        try await page.run("""
+            window.Blob = function () {};
+            window.TextDecoder = undefined;
+            await (await fetch('/created', { method: 'POST', body: new Uint8Array(3) })).text();
+            """)
+        let record = try #require(try await page.records("/created", count: 2).last)
+        #expect(record.state == .completed)
+        #expect(record.requestBody?.byteCount == 3)
+        #expect(record.responseBody?.text == #"{"created":true}"#)
+    }
+
+    @Test("fetch is still no constructor")
+    func fetchIsNoConstructor() async throws {
+        let page = try await page().open()
+        let thrown = try await page.run("try { new fetch('/json'); return 'constructed'; } catch (error) { return error.name; }")
+        #expect(thrown as? String == "TypeError")
+        try await settle()
+        #expect(page.records("/json").isEmpty)
+    }
+
+    /// A copy of the body keeps the stream alive, so a page that cancels its reader
+    /// would wait for the copy.
+    @Test("a page can cancel a stream that is not server-sent events")
+    func cancelStream() async throws {
+        let page = try await page().open()
+        let outcome = try await page.run("""
+            const reader = (await fetch('/ndjson')).body.getReader();
+            await reader.read();
+            return await Promise.race([
+              reader.cancel().then(() => 'cancelled'),
+              new Promise((resolve) => setTimeout(() => resolve('waiting'), 2000)),
+            ]);
+            """)
+        #expect(outcome as? String == "cancelled")
+        let record = try #require(try await page.records("/ndjson", count: 2).last)
+        #expect(record.state == .completed)
+        #expect(record.responseBody == nil)
+    }
+
+    @Test("bytes that are not valid UTF-8 are binary, as in Swift")
+    func brokenUTF8() async throws {
+        let page = try await page().open()
+        try await page.run("await (await fetch('/broken-utf8')).arrayBuffer()")
+        let body = try #require(try await page.records("/broken-utf8", count: 2).last?.responseBody)
+        #expect(body.byteCount == 4)
+        #expect(body.text == nil)
     }
 
     @Test("the page reads the same response with capture as without it")
@@ -168,10 +441,14 @@ final class NectoWebViewCaptureTests {
             });
             return fetched + '|' + requested;
             """
-        let captured = try await page().open().run(script) as? String
+        let capturedPage = try await page().open()
+        let captured = try await capturedPage.run(script) as? String
+        _ = try await capturedPage.records("/large", count: 2)
 
         NectoWebViewCapture.uninstall()
-        let plain = try await page().open().run(script) as? String
+        let plainPage = try await page().open()
+        let plain = try await plainPage.run(script) as? String
+        #expect(plainPage.webView.configuration.userContentController.userScripts.isEmpty)
 
         #expect(captured != nil)
         #expect(captured == plain)
@@ -216,6 +493,39 @@ final class NectoWebViewCaptureTests {
         #expect(messages.first?.detail["frame"] == "main")
     }
 
+    /// Serializing a date raises an exception Swift cannot catch, which would end the
+    /// app. A value JSON cannot hold is shown by its description instead.
+    @Test("a message JSON cannot hold reaches the app and is still reported")
+    func messageJSONCannotHold() async throws {
+        let configuration = TestPage.configuration()
+        let plain = AppHandler()
+        configuration.userContentController.add(plain, name: "plain")
+        let page = try await TestPage(reports: reports, configuration: configuration).open()
+
+        try await page.run("""
+            window.webkit.messageHandlers.plain.postMessage(new Date(0));
+            window.webkit.messageHandlers.plain.postMessage({ when: new Date(0), ratio: NaN });
+            """)
+        try await waitUntil("both messages") { plain.bodies.count == 2 }
+
+        let bodies = page.events.filter { $0.message == "web → app · plain" }.compactMap { $0.detail["body"] }
+        #expect(bodies.count == 2)
+        #expect(bodies.allSatisfy { !$0.isEmpty })
+    }
+
+    @Test("a message from a frame says so")
+    func messageFromFrame() async throws {
+        let configuration = TestPage.configuration()
+        let plain = AppHandler()
+        configuration.userContentController.add(plain, name: "plain")
+        let page = try await TestPage(reports: reports, configuration: configuration).open("/frames")
+
+        try await waitUntil("the frame's message") { plain.bodies.count == 1 }
+        let message = try #require(reports.events.first { $0.message == "web → app · plain" })
+        #expect(message.detail["frame"] == "sub")
+        #expect(message.detail["page"] == "\(TestServer.scheme)://frame-\(page.host)/frame")
+    }
+
     @Test("a reply handler answers the page, and both directions are reported")
     func replyHandler() async throws {
         let configuration = TestPage.configuration()
@@ -232,7 +542,7 @@ final class NectoWebViewCaptureTests {
         #expect(answer as? String == "42:refused")
         #expect(handler.bodies.count == 2)
 
-        try await settle()
+        // Reported before the reply reaches the page, so already here.
         let bridge = page.events.filter { $0.message.contains("ask") }
         try #require(bridge.map(\.message) == [
             "web → app · ask", "app → web · ask reply", "web → app · ask", "app → web · ask reply",
@@ -241,6 +551,8 @@ final class NectoWebViewCaptureTests {
         #expect(bridge[1].level == .info)
         #expect(bridge[3].detail["error"] == "refused")
         #expect(bridge[3].level == .error)
+        try await settle()
+        #expect(page.events.filter { $0.message.contains("ask") }.count == 4)
     }
 
     @Test("a removed handler is released, as it is without capture")
@@ -274,14 +586,33 @@ final class NectoWebViewCaptureTests {
             page.events.filter { $0.detail["script"] == "document.title = 'changed'" }.count == 1
         }
 
-        let reported = try #require(page.events.first { $0.detail["script"] == "6 * 7" })
+        try await settle()
+        let calls = page.events.filter { $0.detail["script"] == "6 * 7" }
+        #expect(calls.count == 1)
+        let reported = try #require(calls.first)
         #expect(reported.message == "app → web · evaluateJavaScript")
         #expect(reported.tag == "WebView")
         #expect(reported.level == .info)
         #expect(reported.detail["result"] == "42")
         #expect(reported.detail["page"] == page.url("/page").absoluteString)
-        #expect(reported.detail["durationMs"] != nil)
+        #expect(reported.detail["durationMs"].flatMap(Int.init) != nil)
         #expect(page.events.first { $0.detail["script"] == "document.title = 'changed'" }?.detail["result"] == #""changed""#)
+    }
+
+    /// One event, sent when the call finishes, but dated when it was made.
+    @Test("an app → page call is dated when it was made")
+    func evaluateDatedAtCall() async throws {
+        let page = try await page().open()
+        let script = "const start = Date.now(); while (Date.now() - start < 300) {} 1"
+
+        var finished: Date?
+        page.webView.evaluate(script) { _, _ in finished = Date() }
+        try await waitUntil("the completion") { finished != nil }
+
+        let reported = try #require(page.events.first { $0.detail["script"] == script })
+        let duration = try #require(reported.detail["durationMs"].flatMap(Int.init))
+        #expect(duration >= 250)
+        #expect(try #require(finished).timeIntervalSince(reported.at) >= 0.25)
     }
 
     @Test("a script that throws is reported as an error, and the app still gets it")
@@ -329,6 +660,7 @@ final class NectoWebViewCaptureTests {
         #expect(reported.message == "app → web · callAsyncJavaScript")
         #expect(reported.detail["arguments"] == #"{"a":1,"b":2}"#)
         #expect(reported.detail["result"] == "3")
+        #expect(reported.level == .info)
     }
 
     @Test("each app → page selector reports exactly one event per call")
@@ -340,11 +672,28 @@ final class NectoWebViewCaptureTests {
         _ = try await page.webView.callAsyncJavaScript("return 'three'", contentWorld: .page)
         // Without a completion: the capture still has to see it finish.
         page.webView.callAsyncJavaScript("return 'four'", in: nil, in: .defaultClient)
+        try await waitUntil("the call without a completion") {
+            page.events.contains { $0.detail["script"] == "return 'four'" }
+        }
 
         try await settle()
         for script in ["'one'", "'two'", "return 'three'", "return 'four'"] {
             #expect(page.events.filter { $0.detail["script"] == script }.count == 1, "\(script)")
         }
+    }
+
+    /// macOS and iOS WebKit route no selector through another, so this drives the
+    /// guard directly: a WebKit build that did would otherwise report one call twice.
+    @Test("an app → page call made inside another is reported once")
+    func nestedPageCall() {
+        NectoPageCall.run("evaluateJavaScript", script: "outer", arguments: nil, page: nil, completion: nil) { outer in
+            NectoPageCall.run("evaluateJavaScript", script: "inner", arguments: nil, page: nil, completion: nil) { inner in
+                inner?(nil, nil)
+            }
+            outer?(NSNumber(value: 1), nil)
+        }
+        #expect(reports.events.map { $0.detail["script"] } == ["outer"])
+        #expect(reports.events.first?.detail["result"] == "1")
     }
 
     // MARK: Safety
@@ -354,17 +703,17 @@ final class NectoWebViewCaptureTests {
         let page = try await page().open()
         try await page.run("""
             const post = (body) => window.webkit.messageHandlers.nectoWebViewCapture.postMessage(body);
+            const record = { id: 'x', method: 'GET', url: new URL('/bad', location.href).href, startedAtMilliseconds: 1 };
             post('nonsense');
-            post({ kind: 'other', record: {} });
+            post({ kind: 'other', record: { ...record, state: 'completed' } });
             post({ kind: 'network', record: { id: 'x' } });
-            post({ kind: 'network', record: { id: 'x', method: 'GET', url: '/bad', startedAtMilliseconds: 1, state: 'odd' } });
-            post({ kind: 'network', record: { id: 'x', method: 'GET', url: '/bad', startedAtMilliseconds: new Date(), state: 'completed' } });
+            post({ kind: 'network', record: { ...record, state: 'odd' } });
+            post({ kind: 'network', record: { ...record, state: 'completed', startedAtMilliseconds: new Date() } });
             await fetch('/json');
             """)
 
         _ = try await page.records("/json", count: 2)
-        try await settle()
-        #expect(reports.records.filter { $0.id == "x" || $0.url == "/bad" }.isEmpty)
+        #expect(page.records("/bad").isEmpty)
     }
 
     @Test("after uninstall nothing is reported and the app's code behaves as before")
@@ -374,6 +723,14 @@ final class NectoWebViewCaptureTests {
         let replies = AppReplyHandler()
         configuration.userContentController.add(handler, name: "early")
         let page = try await TestPage(reports: reports, configuration: configuration).open()
+
+        // Captured while installed, so the silence afterwards means something.
+        try await page.run("window.webkit.messageHandlers.early.postMessage('captured'); await fetch('/json')")
+        _ = try await page.records("/json", count: 2)
+        try await waitUntil("the captured message") { handler.bodies.count == 1 }
+        let recordsBefore = reports.records.count
+        let eventsBefore = reports.events.count
+        #expect(eventsBefore >= 2)
 
         NectoWebViewCapture.uninstall()
         configuration.userContentController.addScriptMessageHandler(replies, contentWorld: .page, name: "late")
@@ -387,11 +744,23 @@ final class NectoWebViewCaptureTests {
 
         var result: Any?
         page.webView.evaluate("'done'") { value, _ in result = value }
-        try await waitUntil("the completion") { result != nil && handler.bodies.count == 1 }
+        try await waitUntil("the completion") { result != nil && handler.bodies.count == 2 }
         #expect(result as? String == "done")
-        #expect(handler.bodies.first as? String == "still delivered")
+        #expect(handler.bodies.last as? String == "still delivered")
 
         try await settle()
+        #expect(reports.records.count == recordsBefore)
+        #expect(reports.events.count == eventsBefore)
+    }
+
+    @Test("installing again sends captures to the new reporters only")
+    func installAgain() async throws {
+        let replacement = Reports()
+        NectoWebViewCapture.install(network: replacement, events: replacement)
+        let page = try await TestPage(reports: replacement).open()
+        try await page.run("await fetch('/json')")
+
+        _ = try await page.records("/json", count: 2)
         #expect(reports.records.isEmpty)
         #expect(reports.events.isEmpty)
     }
@@ -407,9 +776,10 @@ final class NectoWebViewCaptureTests {
         }
         #expect(scripts.count == 1)
 
+        try await first.run("await fetch('/json')")
         try await second.run("await fetch('/json')")
-        #expect(try await second.records("/json", count: 2).count == 2)
-        #expect(first.records("/json").isEmpty)
+        _ = try await first.records("/json", count: 2)
+        _ = try await second.records("/json", count: 2)
     }
 
     // MARK: How apps create WebViews
