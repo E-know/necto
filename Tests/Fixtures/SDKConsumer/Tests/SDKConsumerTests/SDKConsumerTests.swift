@@ -8,6 +8,7 @@ import NectoModel
 import NectoProcessMetrics
 import NectoSDK
 import NectoURLSessionCapture
+import NectoWebViewCapture
 import Testing
 
 #if canImport(NectoMacService) || canImport(NectoCLIService) || canImport(ArgumentParser)
@@ -33,4 +34,10 @@ func sdkConsumer() throws {
     defer { NectoSDK.unregister(id: events.id) }
     #expect(NectoSDK.plugins.map(\.id) == [events.id])
     #expect(NectoSDK.status == .stopped)
+
+    // Type-check WebView capture against the plugins an app registers, without
+    // installing process-wide hooks in the consumer.
+    let install: (any NectoNetworkReporting, any NectoEventReporting) -> Void = NectoWebViewCapture.install
+    let uninstall: () -> Void = NectoWebViewCapture.uninstall
+    _ = (install, uninstall, { install(network.network, events) }, { install(NectoNetworkPlugin(), events) })
 }

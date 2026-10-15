@@ -11,7 +11,7 @@ let package = Package(
     products: [
         .library(name: "NectoSDK", targets: [
             "NectoSDK", "NectoDefaultPlugins", "NectoProcessMetrics",
-            "NectoURLSessionCapture", "NectoModel", "NectoTransport",
+            "NectoURLSessionCapture", "NectoWebViewCapture", "NectoModel", "NectoTransport",
         ]),
     ],
     targets: [
@@ -42,6 +42,14 @@ let package = Package(
             name: "NectoURLSessionCapture",
             dependencies: ["NectoDefaultPlugins", "NectoModel", "NectoSDK"]
         ),
+        // WKWebView traffic and bridge messages, captured only for apps that install it.
+        .target(
+            name: "NectoWebViewCapture",
+            dependencies: ["NectoDefaultPlugins", "NectoModel", "NectoSDK"],
+            resources: [
+                .copy("capture.js"),
+            ]
+        ),
         .testTarget(
             name: "NectoModelTests",
             dependencies: ["NectoModel"]
@@ -57,6 +65,10 @@ let package = Package(
         .testTarget(
             name: "NectoProcessMetricsTests",
             dependencies: ["NectoProcessMetrics", "NectoDefaultPlugins", "NectoSDK", "NectoModel"]
+        ),
+        .testTarget(
+            name: "NectoWebViewCaptureTests",
+            dependencies: ["NectoWebViewCapture", "NectoDefaultPlugins", "NectoModel"]
         ),
     ]
 )

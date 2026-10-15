@@ -35,7 +35,7 @@ test("default plugin interfaces do not pull in capture implementations", () => {
     visited.add(name);
     pending.push(...dependencies(name));
   }
-  for (const capture of ["NectoURLSessionCapture", "NectoProcessMetrics"]) {
+  for (const capture of ["NectoURLSessionCapture", "NectoProcessMetrics", "NectoWebViewCapture"]) {
     assert.ok(!visited.has(capture), `${capture} must remain an opt-in implementation`);
   }
 });
