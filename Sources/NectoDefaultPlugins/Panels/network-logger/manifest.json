@@ -81,6 +81,9 @@
                 },
                 "errorSummary": {
                   "type": "string"
+                },
+                "source": {
+                  "type": "string"
                 }
               },
               "required": [
@@ -167,6 +170,9 @@
                 "type": "number"
               },
               "errorSummary": {
+                "type": "string"
+              },
+              "source": {
                 "type": "string"
               },
               "requestHeaders": {
@@ -301,6 +307,9 @@
                 "type": "number"
               },
               "errorSummary": {
+                "type": "string"
+              },
+              "source": {
                 "type": "string"
               }
             },

@@ -24,6 +24,14 @@ interface MockRecord {
   durationMilliseconds?: number;
   responseByteCount?: number;
   errorSummary?: string;
+  source?: string;
+}
+
+interface MockBody {
+  byteCount: number;
+  isTruncated: boolean;
+  contentType?: string;
+  text?: string;
 }
 
 const headers = {
@@ -91,7 +99,71 @@ const records: MockRecord[] = [
     state: "pending",
     startedAtMilliseconds: Date.now() - 500,
   },
+  // A page in a WebView, captured by NectoWebViewCapture: each kind of row once.
+  {
+    id: "6",
+    method: "GET",
+    url: "https://m.example.com/api/cart/items?view=compact",
+    name: "items?view=compact",
+    host: "m.example.com",
+    state: "completed",
+    startedAtMilliseconds: Date.now() - 4500,
+    statusCode: 200,
+    durationMilliseconds: 42,
+    responseByteCount: 17,
+    source: "WebView",
+  },
+  {
+    id: "7",
+    method: "POST",
+    url: "https://m.example.com/api/estimate/save",
+    name: "save",
+    host: "m.example.com",
+    state: "pending",
+    startedAtMilliseconds: Date.now() - 300,
+    source: "WebView",
+  },
+  {
+    id: "8",
+    method: "GET",
+    url: "https://m.example.com/api/price/compare?productIds=1203,1204,1205,1206,1207,1208,1209,1210&sort=lowest",
+    name: "compare?productIds=1203,1204,1205,1206,1207,1208,1209,1210&sort=lowest",
+    host: "m.example.com",
+    state: "failed",
+    startedAtMilliseconds: Date.now() - 2500,
+    durationMilliseconds: 31,
+    errorSummary: "TypeError: Load failed",
+    source: "WebView",
+  },
+  {
+    id: "9",
+    method: "GET",
+    url: "https://m.example.com/assets/catalog/full-listing.json",
+    name: "full-listing.json",
+    host: "m.example.com",
+    state: "completed",
+    startedAtMilliseconds: Date.now() - 1500,
+    statusCode: 200,
+    durationMilliseconds: 388,
+    responseByteCount: 612_352,
+    source: "WebView",
+  },
 ];
+
+/// Bodies that differ from the default one below, by record id.
+const responseBodies: Record<string, MockBody> = {
+  "6": { byteCount: 17, isTruncated: false, contentType: "application/json", text: '{"hello":"world"}' },
+  "9": {
+    byteCount: 612_352,
+    isTruncated: true,
+    contentType: "application/json",
+    text: JSON.stringify(
+      { products: Array.from({ length: 40 }, (_, index) => ({ id: 1200 + index, price: 1000 * index })) },
+      null,
+      2,
+    ),
+  },
+};
 
 function detail(id: string) {
   const record = records.find((candidate) => candidate.id === id) ?? records[0];
@@ -108,7 +180,7 @@ function detail(id: string) {
             contentType: "application/json",
             text: JSON.stringify({ amount: 1200, currency: "KRW", memo: "coffee" }),
           },
-    responseBody: {
+    responseBody: responseBodies[record.id] ?? {
       byteCount: 24_576,
       isTruncated: true,
       contentType: "application/json",

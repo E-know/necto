@@ -25,6 +25,11 @@ body,
   font-size: var(--necto-size-caption);
 }
 
+/* Traffic the app did not make itself, a WebView page's for one, says so beside the host. */
+.req-source {
+  margin-left: var(--necto-space-2);
+}
+
 /* A failed row reads as failed on its own line, not only in its status cell. */
 tr[data-failed="true"] .req-name {
   color: var(--necto-danger);

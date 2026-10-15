@@ -54,6 +54,7 @@ const requests = [
   { tone: "warning", code: "404", method: "GET", name: "unknown", host: "api.example.com", at: "16:41:04.518", ms: "227 ms", size: "955 B", on: true },
   { tone: "ok", code: "201", method: "POST", name: "transactions?include=merchant&limit=50", host: "api.example.com", at: "16:41:03.518", ms: "1.8 s", size: "24.0 kB" },
   { tone: "ok", code: "200", method: "GET", name: "posts", host: "api.example.com", at: "16:41:02.518", ms: "103 ms", size: "68 B" },
+  { tone: "ok", code: "200", method: "GET", name: "items?view=compact", host: "m.example.com", source: "WebView", at: "16:41:02.204", ms: "42 ms", size: "17 B" },
   { tone: "info", code: "304", method: "GET", name: "avatar.png", host: "cdn.example.com", at: "16:41:01.900", ms: "18 ms", size: "0 B" },
   { tone: "danger", code: "500", method: "GET", name: "error", host: "api.example.com", at: "16:41:01.220", ms: "64 ms", size: "61 B" },
 ];
@@ -79,7 +80,7 @@ document.getElementById("network").innerHTML = `
       <tr aria-selected="${Boolean(r.on)}">
         <td><span class="necto-status necto-status-${r.tone}">${r.code}</span></td>
         <td>${r.method}</td>
-        <td>${r.name}<span class="req-host">${r.host}</span></td>
+        <td>${r.name}<span class="req-host">${r.host}</span>${r.source ? `<span class="necto-badge req-source">${r.source}</span>` : ""}</td>
         <td class="necto-numeric">${r.at}</td>
         <td class="necto-numeric">${r.ms}</td>
         <td class="necto-numeric">${r.size}</td>
@@ -326,7 +327,7 @@ const networkPane = (bar) => `
           <tr aria-selected="${Boolean(r.on)}">
             <td><span class="necto-status necto-status-${r.tone}">${r.code}</span></td>
             <td>${r.method}</td>
-            <td>${r.name}<span class="req-host">${r.host}</span></td>
+            <td>${r.name}<span class="req-host">${r.host}</span>${r.source ? `<span class="necto-badge req-source">${r.source}</span>` : ""}</td>
             <td class="necto-numeric">${r.at}</td>
             <td class="necto-numeric">${r.ms}</td>
           </tr>`).join("")}</tbody>

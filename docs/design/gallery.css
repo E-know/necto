@@ -82,6 +82,7 @@ code { padding: 1px 4px; border-radius: 3px; background: var(--necto-base-05); f
 
 
 .req-host { margin-left: var(--necto-space-2); color: var(--necto-text-tertiary); font-size: var(--necto-size-caption); }
+.req-source { margin-left: var(--necto-space-2); }
 .demo-row { display: flex; align-items: center; gap: var(--necto-space-2); padding: var(--necto-space-3); flex-wrap: wrap; }
 .demo-row + .demo-row { border-top: 1px solid var(--necto-border); }
 .demo-label { width: 84px; flex: none; color: var(--necto-text-tertiary); font-size: var(--necto-size-caption); }

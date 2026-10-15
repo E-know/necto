@@ -189,10 +189,9 @@ function bodyView(body: Body | undefined, label: string): Node[] {
 }
 
 function summary(record: RecordDetail): HTMLElement {
-  const rows: [string, string][] = [
-    [t("Method"), record.method],
-    [t("State"), record.state],
-  ];
+  const rows: [string, string][] = [[t("Method"), record.method]];
+  if (record.source) rows.push([t("Source"), record.source]);
+  rows.push([t("State"), record.state]);
   if (record.statusCode !== undefined) rows.push([t("Status"), String(record.statusCode)]);
   if (record.durationMilliseconds !== undefined) {
     rows.push([t("Duration"), `${Math.round(record.durationMilliseconds)} ms`]);
@@ -232,7 +231,7 @@ const detailPane = createDetailPane("necto.network-logger.detail");
 function visibleRecords(): RecordSummary[] {
   const term = query.trim().toLowerCase();
   return [...records.values()]
-    .filter((record) => !term || `${record.method} ${record.url}`.toLowerCase().includes(term))
+    .filter((record) => !term || `${record.method} ${record.url} ${record.source ?? ""}`.toLowerCase().includes(term))
     .sort((first, second) => second.startedAtMilliseconds - first.startedAtMilliseconds);
 }
 
@@ -241,7 +240,7 @@ function visibleRecords(): RecordSummary[] {
 const filter = el("input", {
   class: "necto-field",
   type: "search",
-  placeholder: t("Filter by method, host or path"),
+  placeholder: t("Filter by method, host, path or source"),
   "aria-label": t("Filter requests"),
 }) as HTMLInputElement;
 
@@ -305,6 +304,7 @@ function renderList(): void {
       el("td", {}, [
         el("span", { class: "req-name" }, [record.name]),
         el("span", { class: "req-host" }, [record.host]),
+        ...(record.source ? [el("span", { class: "necto-badge req-source" }, [record.source])] : []),
       ]),
       el("td", { class: "cell-started cell-numeric necto-numeric" }, [formatStarted(record)]),
       el("td", { class: "cell-duration cell-numeric necto-numeric" }, [formatDuration(record)]),

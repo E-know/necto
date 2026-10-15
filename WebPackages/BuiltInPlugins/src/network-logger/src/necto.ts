@@ -29,6 +29,8 @@ export interface RecordSummary {
   durationMilliseconds?: number;
   responseByteCount?: number;
   errorSummary?: string;
+  /// Where the request came from when it was not the app's own networking: `WebView`.
+  source?: string;
 }
 
 /// The summary plus what the detail pane shows. Fetched one record at a time.
