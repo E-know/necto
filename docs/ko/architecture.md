@@ -51,6 +51,7 @@ NectoPluginRegistry
 | `NectoDefaultPlugins` | Necto가 배포하는 플러그인: 네트워크, 이벤트, 성능 | 앱이 트래픽을 캡처하는 방법 |
 | `NectoProcessMetrics` | 선택적인 CPU, 메모리, FPS, 스레드 샘플링 | 앱에 등록되거나 리더가 구독하기 전의 샘플링 |
 | `NectoURLSessionCapture` | `URLSession`을 쓰는 앱을 위한 하나의 캡처 메커니즘 | 앱에서 끌 수 없는 캡처 기능 |
+| `NectoWebViewCapture` | `WKWebView` 트래픽과 브리지 메시지를 위한 하나의 캡처 메커니즘 | 앱에서 끌 수 없는 캡처 기능, 앱 브리지 프로토콜에 대한 지식 |
 | `Necto/` | 셸 UI와 플러그인 호스트 | 기능 화면 |
 | `ExampleApp/` | 디바이스에서 연결과 플러그인 검증 | 제품 기능 |
 

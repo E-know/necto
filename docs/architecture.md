@@ -51,6 +51,7 @@ handlers and manifest bindings, not a feature-specific host adapter or wire mess
 | `NectoDefaultPlugins` | The plugins Necto ships, including UI Control and its iOS touch runtime | How an app captures traffic |
 | `NectoProcessMetrics` | Optional CPU, memory, FPS and thread sampling | Starting unless the app registers it and a reader subscribes |
 | `NectoURLSessionCapture` | One capture mechanism, for apps using `URLSession` | Capture that an app cannot disable |
+| `NectoWebViewCapture` | One capture mechanism, for `WKWebView` traffic and bridge messages | Capture that an app cannot disable, or knowledge of an app's bridge protocol |
 | `Necto/` | Shell UI and the plugin host | Feature screens |
 | `ExampleApp/` | Verifying connection and plugins on a device | Product features |
 

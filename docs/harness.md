@@ -67,9 +67,10 @@ So Necto ships **an interface and, separately, an optional implementation**:
 ```swift
 NectoDefaultPlugins       // the interface: network.report(record)
 NectoURLSessionCapture    // one implementation, its own module, opt-in
+NectoWebViewCapture       // another, for WKWebView pages, also opt-in
 ```
 
-Both modules ship in the `NectoSDK` product. An app with its own stack registers
+All three ship in the `NectoSDK` product. An app with its own stack registers
 the reporting plugin and calls `report(_:)` without enabling URLSession capture. Wiring the
 implementation into the interface's module would force a guess on every app that
 does not fit it.

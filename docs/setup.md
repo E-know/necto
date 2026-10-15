@@ -102,3 +102,6 @@ Start with `URLSessionNetworkPlugin` and `NectoEventsPlugin`. Network requests a
 as they happen. Keep the registered `events` instance in your app's debug logging code
 and call `events.report(...)` to send log entries, as in the example above. Guard these
 calls with `#if DEBUG` too. Add other plugins for the data you need to inspect.
+
+If your app shows web pages in `WKWebView`, follow [Capturing WebView traffic](webview-capture.md)
+to see their requests and bridge messages in the same panels.

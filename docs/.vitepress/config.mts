@@ -15,6 +15,7 @@ function sidebar(prefix: string, labels: Record<string, string>) {
       items: [
         { text: labels.setup, link: link("setup") },
         { text: labels.install, link: link("install") },
+        { text: labels.webViewCapture, link: link("webview-capture") },
       ],
     },
     {
@@ -49,6 +50,7 @@ const en = sidebar("", {
   start: "Start",
   setup: "Connect Necto to your app",
   install: "Install the Necto app",
+  webViewCapture: "Capture WebView traffic",
   tutorial: "Adding a plugin",
   tutorialDesktop: "Part 1 — A desktop plugin",
   tutorialDevice: "Part 2 — A device plugin",
@@ -68,6 +70,7 @@ const ko = sidebar("/ko", {
   start: "시작하기",
   setup: "앱에 Necto 연결하기",
   install: "Necto 앱 설치하기",
+  webViewCapture: "WebView 통신 보기",
   tutorial: "플러그인을 추가하고 싶다면",
   tutorialDesktop: "1부 — 데스크톱 플러그인",
   tutorialDevice: "2부 — 디바이스 플러그인",
@@ -89,7 +92,7 @@ export default defineConfig({
   description:
     "An iOS debugging platform that connects anywhere, where anything you need " +
     "becomes a plugin — a modern alternative to Flipper.",
-  srcExclude: ["design/**"],
+  srcExclude: ["design/**", "superpowers/**"],
   // The base is not applied to head entries, so the favicon carries it itself.
   head: [["link", { rel: "icon", type: "image/png", href: "/necto/necto-icon.png" }]],
   vite: { plugins: [docsLicensePlugin()] },
