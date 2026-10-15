@@ -25,8 +25,23 @@ body,
   font-size: var(--necto-size-caption);
 }
 
-/* Traffic the app did not make itself, a WebView page's for one, says so beside the host. */
+/* Traffic the app did not make itself, a WebView page's for one, says so beside the host.
+   The path and host give way to a long URL; the badge does not. */
+.req-url {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.req-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .req-source {
+  flex: none;
   margin-left: var(--necto-space-2);
 }
 

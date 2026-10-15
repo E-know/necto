@@ -159,6 +159,23 @@ function statusCell(record: RecordSummary): HTMLElement {
   return el("span", { class: `necto-status necto-status-${tone}` }, [String(code)]);
 }
 
+/// The path, then the host beside it. A source badge follows the host and stays in view
+/// when a long path is cut, because it is the one sign of traffic the app did not make.
+function urlCell(record: RecordSummary): Node[] {
+  const text = [
+    el("span", { class: "req-name" }, [record.name]),
+    el("span", { class: "req-host" }, [record.host]),
+  ];
+  if (!record.source) return text;
+
+  return [
+    el("span", { class: "req-url" }, [
+      el("span", { class: "req-text" }, text),
+      el("span", { class: "necto-badge req-source" }, [record.source]),
+    ]),
+  ];
+}
+
 function pairs(rows: [string, string][]): HTMLElement {
   if (!rows.length) return el("p", { class: "necto-caption" }, [t("Nothing recorded.")]);
 
@@ -301,11 +318,7 @@ function renderList(): void {
     }, [
       el("td", {}, [statusCell(record)]),
       el("td", { class: "cell-method" }, [record.method]),
-      el("td", {}, [
-        el("span", { class: "req-name" }, [record.name]),
-        el("span", { class: "req-host" }, [record.host]),
-        ...(record.source ? [el("span", { class: "necto-badge req-source" }, [record.source])] : []),
-      ]),
+      el("td", {}, urlCell(record)),
       el("td", { class: "cell-started cell-numeric necto-numeric" }, [formatStarted(record)]),
       el("td", { class: "cell-duration cell-numeric necto-numeric" }, [formatDuration(record)]),
       el("td", { class: "cell-size cell-numeric necto-numeric" }, [formatBytes(record.responseByteCount)]),
