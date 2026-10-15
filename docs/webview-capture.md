@@ -21,6 +21,9 @@ script into each page at runtime.
 
 - The app is set up for Necto as described in [setup.md](setup.md), and its start-up
   code calls `NectoSDK.start()`.
+- No dependency changes. `NectoWebViewCapture` ships in the `NectoSDK` product the app
+  already links. With Tuist, `.external(name: "NectoSDK")` brings it; do not add a
+  separate product for it.
 - The app's pages run in `WKWebView`. `SFSafariViewController` and
   `ASWebAuthenticationSession` are separate browsers and are not captured.
 
@@ -51,6 +54,8 @@ NectoSDK.register(events)
 - An app that registers `NectoNetworkPlugin` instead of `URLSessionNetworkPlugin` passes
   that plugin where the examples below pass `network.network`.
 - If either plugin is not registered yet, register it. Register each one only once.
+  `install` needs both: bridge messages go to the events plugin, requests to the
+  network plugin.
 
 ### 3. Install the capture
 
@@ -70,12 +75,15 @@ NectoSDK.start()
 #endif
 ```
 
-`install` captures only the WebViews created after it runs. Search for `WKWebView(` and
-`WKWebViewConfiguration(`, and for WebViews in storyboards and nibs, and confirm that
-none of them is created before this code. Start-up code in the `App` initializer or in
-`application(_:didFinishLaunchingWithOptions:)` normally comes first. If something
-creates a WebView earlier, a preloading service for example, move the Necto block
-before it.
+`install` captures only what is set up after it runs: WebViews created later, and
+message handlers registered later. Search for `WKWebView(`, `WKWebViewConfiguration(`
+and `.add(` on a `WKUserContentController`, and for WebViews in storyboards and nibs,
+and confirm that none of them runs before this code. Look at stored properties and
+singletons too: a property initializer of the `App` type or the app delegate, or a
+shared WebView pool, runs before the start-up code in its `init`. Start-up code in the
+`App` initializer or in `application(_:didFinishLaunchingWithOptions:)` normally comes
+first. If something creates a WebView or registers a handler earlier, move the Necto
+block before it.
 
 ### 4. Check how the app's bridge works
 
@@ -134,7 +142,9 @@ Check how the library carries messages:
 ### 5. Build
 
 Build the Debug configuration. Build Release too, and confirm that it compiles with
-every Necto call still inside `#if DEBUG`.
+every Necto call still inside `#if DEBUG`. A Release build may still contain the module
+and its script, as with the rest of the SDK; without the `install` call nothing in it
+runs.
 
 ## Verify
 
@@ -147,7 +157,7 @@ In the Necto app:
 - **Event Log**, filtered to the `WebView` category, lists `web → app · …` and
   `app → web · …` lines.
 
-With `necto` (`necto-cli` for a development build of Necto), find the device and app:
+With `necto` (also installed as `necto-cli`), find the device and app:
 
 ```bash
 necto device list --json
@@ -175,24 +185,59 @@ necto plugin send event-log events.list --device <device-id> --app <bundle-id> -
 - [ ] Debug and Release both build.
 - [ ] Network shows WebView records, and Event Log shows `WebView` events.
 
+## What it records
+
+Network rows carry `"source": "WebView"`. Event Log rows have the `WebView` tag, and
+their detail holds:
+
+| Event | Detail |
+| --- | --- |
+| `web → app · <name>` | `body` (JSON), `page` (the frame's URL), `frame` (`main` or `sub`) |
+| `app → web · <name> reply` | `reply` (JSON) or `error`, `page` |
+| `app → web · evaluateJavaScript` | `script`, `result` (JSON) or `error`, `page`, `durationMs` |
+| `app → web · callAsyncJavaScript` | `script`, `arguments` (JSON), `result` (JSON) or `error`, `page`, `durationMs` |
+
+- A call from the app into a page is one event, sent when it finishes and dated when
+  it was made.
+- A value JSON cannot hold, such as a date, is shown by its description. Each value is
+  cut at 64 KB, with a note of its full size.
+- Results and payloads are recorded as they are. A script that reads `document.cookie`
+  puts the cookies in Event Log.
+- An `XMLHttpRequest` hands over its body already decoded, so its size is that of the
+  text, not of the bytes on the wire.
+
 ## What it cannot see
 
 - Page navigations and what the browser loads by itself: HTML documents, images, CSS,
   `<script>` files and fonts.
-- Requests made inside a Service Worker.
+- Requests made inside a Web Worker or a Service Worker, and traffic that is not
+  `fetch` or `XMLHttpRequest`: WebSocket, `EventSource` and `navigator.sendBeacon`.
+- The body of a streaming response. Server-sent events, NDJSON and similar streams are
+  recorded as completed when their headers arrive.
 - Headers the browser adds, such as `Cookie` and `User-Agent`.
 - Response headers of cross-origin requests that CORS does not expose.
 
-Safari Web Inspector shows all of these. In Debug builds, set
-`webView.isInspectable = true` (iOS 16.4 and later) and open the page from Safari's
-Develop menu.
+Safari Web Inspector shows all of these. In Debug builds, make the WebView inspectable
+and open the page from Safari's Develop menu:
+
+```swift
+#if DEBUG
+if #available(iOS 16.4, *) {
+    webView.isInspectable = true
+}
+#endif
+```
+
+While capture is on, a page can tell: `window.__nectoWebViewCapture` is set and
+`fetch.toString()` is not the browser's own. A page that stops reading a response
+body part way waits for the rest to arrive before its `cancel()` completes.
 
 ## Troubleshooting
 
 | Symptom | Likely cause |
 | --- | --- |
 | Nothing from any WebView | `install` ran after the WebView was created, or the build being run is not Debug. |
-| Requests appear, bridge messages do not | The bridge uses a URL scheme or a library. See step 4. |
+| Requests appear, bridge messages do not | The bridge uses a URL scheme or a library, see step 4, or its handler was registered before `install` ran, see step 3. |
 | A page behaves differently with capture on | The page checks whether `fetch` is the browser's own. Call `NectoWebViewCapture.uninstall()` for that run, and report the page. |
 | A request body shows only its size | The body was `FormData`, a `Blob` or binary data. Only text bodies are recorded. |
 | A request shows no body | The body was a stream, or travelled inside a `Request` object. Neither is read, so the page's upload is never consumed twice. |

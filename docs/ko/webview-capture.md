@@ -21,6 +21,9 @@
 
 - [setup.md](setup.md)대로 앱에 Necto가 연결되어 있고, 앱 시작 코드에서
   `NectoSDK.start()`를 불러요.
+- 의존성은 바꾸지 않아요. `NectoWebViewCapture`는 앱이 이미 링크하는 `NectoSDK`
+  product에 들어 있어요. Tuist라면 `.external(name: "NectoSDK")`로 함께 들어오니,
+  따로 product를 추가하지 마세요.
 - 앱의 페이지가 `WKWebView`에서 돌아요. `SFSafariViewController`와
   `ASWebAuthenticationSession`은 별도 브라우저라서 캡처되지 않아요.
 
@@ -51,6 +54,8 @@ NectoSDK.register(events)
 - `URLSessionNetworkPlugin` 대신 `NectoNetworkPlugin`을 등록하는 앱은 아래 예제의
   `network.network` 자리에 그 플러그인을 넘기세요.
 - 두 플러그인 중 등록되지 않은 것이 있으면 등록하세요. 각각 한 번씩만 등록해요.
+  `install`에는 둘 다 필요해요. 브리지 메시지는 이벤트 플러그인으로, 요청은 네트워크
+  플러그인으로 가요.
 
 ### 3. 캡처 설치하기
 
@@ -70,12 +75,15 @@ NectoSDK.start()
 #endif
 ```
 
-`install`은 호출된 뒤에 만들어진 WebView만 캡처해요. `WKWebView(`와
-`WKWebViewConfiguration(`를 검색하고 storyboard·nib 안의 WebView도 찾아서, 이 코드보다
-먼저 만들어지는 것이 없는지 확인하세요. `App` 이니셜라이저나
+`install`은 호출된 뒤에 설정된 것만 캡처해요. 그 뒤에 만들어진 WebView와 그 뒤에
+등록된 메시지 핸들러예요. `WKWebView(`, `WKWebViewConfiguration(`,
+`WKUserContentController`의 `.add(`를 검색하고 storyboard·nib 안의 WebView도 찾아서,
+이 코드보다 먼저 실행되는 것이 없는지 확인하세요. 저장 프로퍼티와 싱글턴도 보세요.
+`App` 타입이나 앱 delegate의 프로퍼티 초기값, 공유 WebView 풀은 `init` 안의 시작
+코드보다 먼저 실행돼요. `App` 이니셜라이저나
 `application(_:didFinishLaunchingWithOptions:)`의 시작 코드는 보통 가장 먼저 실행돼요.
-미리 불러오기 서비스처럼 더 일찍 WebView를 만드는 곳이 있으면 Necto 블록을 그보다
-앞으로 옮기세요.
+더 일찍 WebView를 만들거나 핸들러를 등록하는 곳이 있으면 Necto 블록을 그보다 앞으로
+옮기세요.
 
 ### 4. 앱의 브리지 방식 확인하기
 
@@ -132,7 +140,8 @@ func webView(_ webView: WKWebView,
 ### 5. 빌드하기
 
 Debug 구성으로 빌드하세요. Release도 빌드해서, 모든 Necto 호출이 `#if DEBUG` 안에
-있는 채로 컴파일되는지 확인하세요.
+있는 채로 컴파일되는지 확인하세요. SDK의 다른 부분처럼 Release 빌드에도 모듈과
+스크립트가 남을 수 있어요. `install`을 부르지 않으면 그 안의 어떤 것도 실행되지 않아요.
 
 ## 확인하기
 
@@ -145,8 +154,8 @@ Necto 앱에서:
 - **Event Log**를 `WebView` 카테고리로 거르면 `web → app · …`, `app → web · …` 줄이
   보여요.
 
-`necto`로 확인할 수도 있어요. Necto 개발 빌드라면 `necto-cli`를 쓰세요. 먼저 기기와
-앱을 찾으세요.
+`necto`(`necto-cli`라는 이름으로도 설치돼요)로 확인할 수도 있어요. 먼저 기기와 앱을
+찾으세요.
 
 ```bash
 necto device list --json
@@ -175,24 +184,58 @@ necto plugin send event-log events.list --device <device-id> --app <bundle-id> -
 - [ ] Debug와 Release가 모두 빌드돼요.
 - [ ] Network에 WebView 기록이, Event Log에 `WebView` 이벤트가 보여요.
 
+## 기록하는 내용
+
+Network의 기록에는 `"source": "WebView"`가 붙어요. Event Log의 줄은 `WebView` 태그를
+달고, detail에는 다음이 들어 있어요.
+
+| 이벤트 | detail |
+| --- | --- |
+| `web → app · <name>` | `body`(JSON), `page`(프레임 URL), `frame`(`main` 또는 `sub`) |
+| `app → web · <name> reply` | `reply`(JSON) 또는 `error`, `page` |
+| `app → web · evaluateJavaScript` | `script`, `result`(JSON) 또는 `error`, `page`, `durationMs` |
+| `app → web · callAsyncJavaScript` | `script`, `arguments`(JSON), `result`(JSON) 또는 `error`, `page`, `durationMs` |
+
+- 앱이 페이지를 호출한 것은 끝났을 때 이벤트 하나로 보내고, 시각은 호출한 때로 적어요.
+- 날짜처럼 JSON으로 담을 수 없는 값은 설명 문자열로 보여요. 값마다 64 KB에서 자르고
+  전체 크기를 함께 적어요.
+- 결과와 페이로드는 있는 그대로 기록해요. `document.cookie`를 읽는 스크립트라면
+  Event Log에 쿠키가 보여요.
+- `XMLHttpRequest`는 이미 디코딩된 본문을 넘겨주므로, 크기는 전송된 바이트가 아니라
+  텍스트의 크기예요.
+
 ## 볼 수 없는 것
 
 - 페이지 이동과 브라우저가 직접 불러오는 것: HTML 문서, 이미지, CSS, `<script>` 파일,
   폰트.
-- Service Worker 안에서 보낸 요청.
+- Web Worker나 Service Worker 안에서 보낸 요청, 그리고 `fetch`나 `XMLHttpRequest`가
+  아닌 통신: WebSocket, `EventSource`, `navigator.sendBeacon`.
+- 스트리밍 응답의 본문. server-sent events, NDJSON 같은 스트림은 헤더가 도착할 때
+  완료로 기록해요.
 - 브라우저가 붙이는 헤더. `Cookie`, `User-Agent` 등이에요.
 - CORS가 노출하지 않은 다른 origin 응답의 헤더.
 
-이런 것은 Safari Web Inspector에서 모두 볼 수 있어요. Debug 빌드에서
-`webView.isInspectable = true`(iOS 16.4 이상)로 두고 Safari의 개발자용 메뉴에서
-페이지를 여세요.
+이런 것은 Safari Web Inspector에서 모두 볼 수 있어요. Debug 빌드에서 WebView를 검사
+가능하게 두고 Safari의 개발자용 메뉴에서 페이지를 여세요.
+
+```swift
+#if DEBUG
+if #available(iOS 16.4, *) {
+    webView.isInspectable = true
+}
+#endif
+```
+
+캡처가 켜져 있으면 페이지가 알아챌 수 있어요. `window.__nectoWebViewCapture`가
+설정되고, `fetch.toString()`이 브라우저 원본과 달라요. 응답 본문을 읽다가 멈춘
+페이지는 나머지가 다 도착해야 `cancel()`이 끝나요.
 
 ## 문제 해결
 
 | 증상 | 가능한 원인 |
 | --- | --- |
 | 어떤 WebView에서도 아무것도 안 보여요 | WebView가 만들어진 뒤에 `install`이 실행됐거나, 실행 중인 빌드가 Debug가 아니에요. |
-| 요청은 보이는데 브리지 메시지가 안 보여요 | 브리지가 URL scheme이나 라이브러리 방식이에요. 4단계를 보세요. |
+| 요청은 보이는데 브리지 메시지가 안 보여요 | 브리지가 URL scheme이나 라이브러리 방식이거나(4단계), 핸들러가 `install`보다 먼저 등록됐어요(3단계). |
 | 캡처를 켜면 페이지 동작이 달라져요 | 페이지가 `fetch`가 브라우저 원본인지 검사하고 있어요. 그 실행에서는 `NectoWebViewCapture.uninstall()`을 부르고, 해당 페이지를 알려 주세요. |
 | 요청 본문이 크기만 보여요 | 본문이 `FormData`, `Blob`, 바이너리 데이터였어요. 텍스트 본문만 기록돼요. |
 | 요청 본문이 아예 없어요 | 본문이 스트림이었거나 `Request` 객체 안에 담겨 있었어요. 페이지의 업로드를 두 번 읽지 않도록 둘 다 읽지 않아요. |

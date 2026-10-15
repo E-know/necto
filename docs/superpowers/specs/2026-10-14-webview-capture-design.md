@@ -1,7 +1,7 @@
 # NectoWebViewCapture design
 
 Date: 2026-10-14
-Status: draft for review
+Status: implemented on 0.2.1 (see Implementation notes)
 
 ## Goal
 
@@ -337,3 +337,59 @@ exactly once.
 - Whether a script injected with `forMainFrameOnly: false` runs in cross-origin
   iframes.
 - Whether the example app's ATS settings let the WebView load from `127.0.0.1`.
+
+## Implementation notes (2026-10-15)
+
+Built on 0.2.1 rather than 0.2.0. 0.2.1 replaced the Objective-C touch injection with a
+Swift runtime implementation, so there is no `NectoTouchInjection` target, and
+`script/tests/package.test.mjs` already pins that. Nothing else in this spec depended on
+it.
+
+Where the code differs from the text above:
+
+- Hooks use `class_replaceMethod` after reading the original `IMP`, so a method
+  `WKWebView` only inherited would be added to it rather than changed for every class.
+  The initialiser hooks pass ownership through `Unmanaged`, because an `init` method's
+  retain conventions do not match a Swift block's.
+- Event `detail`: payloads (`body`, `reply`, `result`, `arguments`) are JSON text;
+  `script`, `error`, `page`, `frame` and `durationMs` are plain text. Reply events also
+  carry `page`. A JavaScript exception's `error` includes its message.
+- `capture.js` falls back to ids of its own when `crypto.randomUUID` is missing, which it
+  is outside a secure context. A fetch failure reads `TypeError: Load failed` (name and
+  message).
+- Streams other than server-sent events also complete at their headers without a body:
+  NDJSON, JSON Lines, JSON text sequences, `application/stream+json` and
+  `multipart/x-mixed-replace`. Reading a copy keeps a stream open, so a page that
+  cancelled its own reader would otherwise wait on the copy.
+- An XHR records the request it belongs to even when the page opens the object again or
+  aborts it after it finished, and status 0 counts as a failure only when no `load`
+  fired (a scheme handler's non-HTTP response is a success).
+- The network panel keeps the source badge in view on a long URL: in a row with a source,
+  the path and host are cut before the badge is.
+- The example page is an HTML string in `WebViewDemoView.swift`, loaded with
+  `LocalAPI`'s origin as its base URL, and the screen is reached from the Network tab
+  rather than a sixth tab.
+
+Verified:
+
+- `WKWebView` runs under `swift test` when tests wait with `Task.sleep`; spinning the run
+  loop inside a main-actor test does not deliver WebKit's callbacks.
+- `fetch` and XHR from a custom-scheme page to the same scheme work, so the tests need
+  no socket.
+- A script injected with `forMainFrameOnly: false` runs in a cross-origin iframe on macOS
+  WebKit and in the iOS 26.5 simulator.
+- The WebView capture suite passes on macOS and in the iOS 26.5 simulator, including one
+  event per call for each app → page selector.
+- ExampleApp in the iOS 26.5 simulator, connected to a Mac app built from this branch
+  (Mac code unchanged from 0.2.1): `necto-cli` listed the page's fetch GET and POST and
+  its XHR with `source: WebView`, and one event each for the message, its reply and
+  `evaluateJavaScript`. The app's default ATS settings let the WebView load from
+  `127.0.0.1`.
+
+Not verified:
+
+- A physical iOS device. The selector findings and one event per call are confirmed in
+  the simulator only.
+- The iOS 16.0 simulator: on this host its WebContent process fails to launch for any
+  WKWebView, with or without capture, so no page loads there. The module builds for an
+  iOS 16 deployment target.
